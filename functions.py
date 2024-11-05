@@ -14,6 +14,7 @@ from tqdm import tqdm  # Progress bar
 from utils import ICE_STRINGS, GROUP_NAMES
 from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_feature_fusion
 from wnet import WNet
+from wnet_separate_decoders import WNet_Separate_Decoders
 
 from r2_replacement import r2_score_random 
 
@@ -225,6 +226,7 @@ def save_best_model(cfg, train_options: dict, net, optimizer, scheduler, epoch: 
                     'epoch': epoch,
                     'train_options': train_options
                     },
+                #do I need to change these?????
                f=os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth'))
     print(f"model saved successfully at {os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth')}")
 
@@ -505,6 +507,8 @@ def get_model(train_options, device):
         net = UNet_regression_feature_fusion(options=train_options, input_channels=input_channels).to(device)
     elif train_options['model_selection'] =='wnet':
         net = WNet(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-decoders':
+        net = WNet_Separate_Decoders(options=train_options).to(device)
     else:
         raise 'Unknown model selected'
     return net

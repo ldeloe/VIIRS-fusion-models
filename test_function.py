@@ -317,11 +317,11 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     wandb.run.log({mode+' results table': scenes_results_table})
     print('done saving result per scene on wandb table')
 
-    # compute combine score
+    # compute combine score   
     combined_score, scores = compute_metrics(true=inf_ys_flat, pred=outputs_flat, charts=train_options['charts'],
                                              metrics=train_options['chart_metric'], num_classes=train_options['n_classes'])
     
-    # Release memory
+    # Release 
     torch.cuda.empty_cache()
 
     print('done calculating overall results. ')
