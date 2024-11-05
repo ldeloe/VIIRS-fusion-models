@@ -1,5 +1,9 @@
 # VIIRS-fusion-models
 
+## Double U-Net (W-Net) Model
+
+![W-Net](https://github.com/user-attachments/assets/c7eeb49d-7368-4a62-ba52-bd6e968fb0cc)
+
 ## Dependencies
 The following dependencies were used to create the current venv:
 - python/3.10.2
