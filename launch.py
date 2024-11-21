@@ -161,7 +161,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
 
             # - Final output layer, and storing of non masked pixels.
             for chart in train_options['charts']:
-                print("CHART: ", chart)
+                #print("CHART: ", chart)
                 output[chart] = class_decider(output[chart], train_options, chart)
                 outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart][~cfv_masks[chart]]))
 
@@ -216,7 +216,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
         ### NEW ###
         accuracy = accuracy_metric(preds_SIC_class, target_SIC_class)
         wandb.log({f"SIC Accuracy": accuracy}, step=epoch)
-        #print(f"SIC Accuracy: {accuracy:.3f}%")
+        print(f"SIC Accuracy: {accuracy:.3f}%")
         ### NEW ###
 
         print(f"Combined score: {combined_score}%")

@@ -29,7 +29,10 @@ cd /home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/
 echo "starting training..."
 
 #python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_cross_val.py"  --wandb-project='w-net-cross-validation'
-python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_sic_class_fig.py"  --wandb-project='test-SIC-acc'
+#python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_sic_class_fig.py"  --wandb-project='test-SIC-acc'
+python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_bar_charts.py"  --wandb-project='test-SIC-acc'
+
+#python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_sic_class_acc.py"  --wandb-project='test-SIC-acc'
 
 #python launch.py $1 --wandb-project='w-net-cross-validation'
 

@@ -18,6 +18,26 @@ from wnet_separate_decoders import WNet_Separate_Decoders
 
 from r2_replacement import r2_score_random 
 
+def generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_label, bar_width, title):
+  labels = [GROUP_NAMES[chart][i] for i in range(len(pixels_per_class))]
+  percent_class = [(class_n/n_pixels)*100 for class_n in pixels_per_class]
+
+  plt.figure(figsize=(6, 5))
+  bars = plt.bar(labels, percent_class,width=bar_width)
+
+  for bar, class_n in zip(bars, percent_class):
+    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+             f"{class_n:.2f}%", ha='center', va='bottom', fontsize=10)
+    
+  plt.xlabel(x_label)
+  plt.ylabel("Pixel Count Percentage [%]")
+  #plt.xticks(list(LABELS.values()), labels=list(LABELS.values()), rotation=45, ha='right')
+  plt.xticks(list(GROUP_NAMES[chart].values()), rotation=45, ha='right')
+  plt.tight_layout()
+  plt.savefig(f"{title}-{chart}-BAR-CHART.png", dpi=150)
+  plt.close('all')
+  #plt.show()  
+
 def chart_cbar(ax, n_classes, chart, cmap='vridis'):
 
     """

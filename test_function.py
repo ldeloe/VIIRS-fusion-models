@@ -13,7 +13,7 @@ from tqdm import tqdm
 from mmcv import mkdir_or_exist
 import wandb
 # --Proprietary modules -- #
-from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC, accuracy_metric, classify_SIC_tensor #water_edge_plot_overlay, water_edge_metric,
+from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC, accuracy_metric, classify_SIC_tensor, generate_pixels_per_class_bar_graph #water_edge_plot_overlay, water_edge_metric,
 from loaders import TestDataset, get_variable_options
 #from functions_VIIRS import slide_inference, batched_slide_inference
 from torchmetrics.functional.classification import multiclass_confusion_matrix
@@ -384,6 +384,25 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                                              metrics=train_options['chart_metric'], num_classes=train_options['n_classes'])
     
     accuracy = accuracy_metric(preds_SIC_class, target_SIC_class)
+
+    ### BAR CHART ###
+    print("BAR CHARTS")
+    x_axis_label = ["Sea Ice Concentration [%]", "Stage of Development", "Floe Size"]
+    bar_widths = [5, 0.8, 0.8]
+    for idx, chart in enumerate(train_options['charts']):
+        chart_data = inf_ys_flat[chart]
+        n_pixels = 0
+        pixels_per_class = np.zeros(train_options['n_classes'][chart] - 1)
+
+        for i in range(0, train_options['n_classes'][chart] - 1):
+            n_class = torch.sum(chart_data == i).item()
+            pixels_per_class[i] += n_class
+            n_pixels += n_class
+
+        title = osp.join(cfg.work_dir,inference_name,inference_name)
+        generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_axis_label[idx], bar_widths[idx], title)
+    ### BAR CHART ###
+
     #scene_results2 = [x.item() for x in scores.values()]
     #print("FULL DATASET SCENE SCORES")
     #print(scene_results2)    
