@@ -1,6 +1,7 @@
 # -- Built-in modules -- #
 import os
 import json
+import xarray as xr
 # -- Third-party modules -- #
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -20,7 +21,7 @@ from r2_replacement import r2_score_random
 
 def generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_label, bar_width, title):
   labels = [GROUP_NAMES[chart][i] for i in range(len(pixels_per_class))]
-  percent_class = [(class_n/n_pixels)*100 for class_n in pixels_per_class]
+  percent_class = [float((class_n/n_pixels)*100) for class_n in pixels_per_class]
 
   plt.figure(figsize=(6, 5))
   bars = plt.bar(labels, percent_class,width=bar_width)
@@ -419,6 +420,38 @@ def create_train_validation_and_test_scene_list(train_options):
     with open(train_options['path_to_env'] + train_options['train_viirs']) as file:
         train_options['train_list_viirs'] = json.loads(file.read())
     ### VIIRS ###
+
+    ##############################################################
+    generate_train_bar_graph = False # only set to true if the train/val dataset changes  # add to config in future?
+
+    if generate_train_bar_graph:
+        with open(train_options['path_to_env'] + 'datalists/train_dataset_cross_validation.json') as file:
+            bar_data = json.loads(file.read())
+        bar_data = [file[17:32] + '_' + file[77:80] + '_prep.nc' for file in bar_data]
+        
+        print("TRAIN BAR CHARTS")
+        x_axis_label = ["Sea Ice Concentration [%]", "Stage of Development", "Floe Size"]
+        bar_widths = [5, 0.8, 0.8]
+
+        n_pixels = np.zeros((3,1))
+        pixels_per_class = np.zeros((3,train_options['n_classes']['SIC']-1))
+
+        for data_file in bar_data:
+            print(data_file)
+            scene = xr.open_dataset('./dataset/' + data_file, engine='h5netcdf')            
+
+            for idx, chart in enumerate(train_options['charts']):
+                chart_data = scene.variables[chart].values
+
+                for i in range(0, train_options['n_classes'][chart] - 1):
+                    n_class = np.count_nonzero(chart_data == i) 
+                    pixels_per_class[idx][i] += n_class
+                    n_pixels[idx] += n_class
+
+        title = './work_dir/opt_test_bar_charts/train_bar_charts'
+        for idx, chart in enumerate(train_options['charts']):
+            generate_pixels_per_class_bar_graph(chart, pixels_per_class[idx][0:train_options['n_classes'][chart] - 1], n_pixels[idx], x_axis_label[idx], bar_widths[idx], title)
+    ##############################################################
 
     # Validation ---------
     if train_options['cross_val_run']:
