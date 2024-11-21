@@ -29,4 +29,7 @@ cd /home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/
 
 echo "starting training..."
 
-python launch.py '/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/wnet_test.py' --wandb-project='wnet-test'
+python launch.py '/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/wnet_test5.py' --wandb-project='wnet-test'
+
+#46657220
+

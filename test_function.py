@@ -13,7 +13,7 @@ from tqdm import tqdm
 from mmcv import mkdir_or_exist
 import wandb
 # --Proprietary modules -- #
-from functions import chart_cbar, compute_metrics, class_decider #water_edge_plot_overlay, water_edge_metric,
+from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC #water_edge_plot_overlay, water_edge_metric,
 from loaders import TestDataset, get_variable_options
 #from functions_VIIRS import slide_inference, batched_slide_inference
 from torchmetrics.functional.classification import multiclass_confusion_matrix
@@ -59,6 +59,13 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     output_tfv_mask = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Outputs mask by train fill values fo all scenes
     outputs_tfv_mask = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
+
+    ### NEW ###
+    preds_SIC_class = torch.Tensor().to(device)
+    target_SIC_class = torch.Tensor().to(device)
+    output_preds = torch.Tensor().to(device)
+    inf_y_flat_target = torch.Tensor().to(device)
+    ### NEW ###
 
     # ### Prepare the scene list, dataset and dataloaders
 
@@ -151,6 +158,13 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             inf_y_flat[chart] = inf_y[chart][~cfv_masks[chart]].to(device, non_blocking=True).float()
             inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y_flat[chart]))
 
+        ### NEW ###
+        output_preds = classify_SIC_tensor(output_flat['SIC'])
+        preds_SIC_class = torch.cat((preds_SIC_class, output_preds)) 
+        inf_y_flat_target = classify_SIC_tensor(inf_y_flat['SIC'])
+        target_SIC_class = torch.cat((target_SIC_class, inf_y_flat_target))
+        ### NEW ###
+
         for chart in train_options['charts']: 
             inf_y[chart] = inf_y[chart].cpu().numpy()
             output_class[chart] = output_class[chart].squeeze().cpu().numpy()
@@ -169,11 +183,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             ax.set_xticks([])
             ax.set_yticks([])
             ax.imshow(img, cmap='gray')
-
-        #ax = axs[2]
-        #ax.set_title('Water Edge SIC: Red, SOD: Green,Floe: Blue')
-        #edge_water_output = water_edge_plot_overlay(output_class, tfv_mask.cpu().numpy(), train_options)
-        #ax.imshow(edge_water_output, vmin=0, vmax=1, interpolation='nearest')
 
 
         for idx, chart in enumerate(train_options['charts']):
@@ -274,26 +283,75 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                     #format='png', dpi=128, bbox_inches="tight")
         plt.close('all')
 
+
+        ### ADD NEW CLASSIFICATION FOR SIC METRIC ###
+        fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=1, figsize=(5, 14))
+        axs_SIC_classes = axs2d_SIC_classes.flat
+        ## SIC CLASSIFICATION ##
+        n_classes = 4
+        ax_SIC = axs_SIC_classes[0]
+        converted_SIC = classify_from_SIC(output_class['SIC'])
+        print('cfv_masks[SIC]: ', cfv_masks['SIC'])
+        #output_class['SIC'] = output_class['SIC'].astype(float)
+        converted_SIC = converted_SIC.astype(float)
+        converted_SIC[cfv_masks['SIC']] = np.nan ### Still working on this!!
+
+        ax_SIC.imshow(converted_SIC, vmin=0, vmax=n_classes - 2, cmap='jet', interpolation='nearest')
+        ax_SIC.set_xticks([])
+        ax_SIC.set_yticks([])
+        ax_SIC.set_title('Model Prediction') # removed square brackets
+        cbar_ice_classification(ax=ax_SIC, n_classes=n_classes, cmap='jet')
+        ## ICE CHART ##
+        ax_SIC = axs_SIC_classes[1]
+        converted_GT = classify_from_SIC(inf_y['SIC'])
+        converted_GT = converted_GT.astype(float)
+        converted_GT[cfv_masks['SIC']] = np.nan
+        ax_SIC.imshow(converted_GT, vmin=0, vmax=n_classes - 2, cmap='jet', interpolation='nearest')
+        ax_SIC.set_xticks([])
+        ax_SIC.set_yticks([])        
+        ax_SIC.set_title('Ground Truth')
+        cbar_ice_classification(ax=ax_SIC, n_classes=n_classes, cmap='jet')               
+
+        plt.subplots_adjust(left=0, bottom=0, right=1, top=0.75, wspace=0.5, hspace=-0)
+        fig_SIC_classes.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Classification.png",
+                    format='png', dpi=150, bbox_inches="tight")
+        plt.close('all')
+        ### ADD NEW CLASSIFICATION FOR SIC METRIC ###
+
         table.add_data(scene_name, wandb.Image(f"{osp.join(cfg.work_dir,inference_name,scene_name)}.png"))
 
         # Saving results per scene
 
         
         # Get the scores per scene
+        print("ACTUAL METRIC (R2 RAND)")
         scene_combined_score, scene_scores = compute_metrics(true=inf_y_flat, pred=output_flat,
                                                              charts=train_options['charts'],
                                                              metrics=train_options['chart_metric_individual_scenes'],
                                                              num_classes=train_options['n_classes'])
-        
+        ### NEW ###
+        scene_accuracy = accuracy_metric(output_preds, inf_y_flat_target)
+        ### NEW ###        
+        ##TEST USING R2 METRIC ###
+        print("TEST METRIC (R2)")
+        scene_combined_score_TEST, scene_scores_TEST = compute_metrics(true=inf_y_flat, pred=output_flat,
+                                                             charts=train_options['charts'],
+                                                             metrics=train_options['chart_metric'],
+                                                             num_classes=train_options['n_classes'])        
         #scene_water_edge_accuarcy = water_edge_metric(output_tfv_mask, train_options)
         
         # Create table with results and log it into wandb b. 
         # Add all the scores into a list and append it to results per scene. 
         # This list with be the data for the table
         scene_results = [x.item() for x in scene_scores.values()]
+        #print("INDIVIDUAL SCENE SCORES")
+        #print(scene_results)
         scene_results.insert(0, scene_combined_score.item())
         scene_results.insert(0, scene_name)
         #scene_results.append(scene_water_edge_accuarcy.item())
+        ### NEW ###
+        scene_results.append(scene_accuracy)
+        ### NEW ###
         results_per_scene.append(scene_results)
 
         # Saving scene results on summary if  mode == 'test'
@@ -304,14 +362,18 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
             for chart in train_options['charts']:
                 wandb.run.summary[f"{'Test '+scene_name}/{chart} {train_options['chart_metric_individual_scenes'][chart]['func'].__name__}"] = scene_scores[chart]
-
+            
+            ### NEW ###
+            wandb.run.summary[f"{'Test '+scene_name}/SIC Accuracy"] = scene_accuracy
+            ### NEW ###
             #wandb.run.summary[f"{'Test '+scene_name}/Water Consistency Accuarcy"] = scene_water_edge_accuarcy
 
     print('inference done')
     # Create wandb table to store results
     #scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE', 'Water Consistency Acccuracy'],
 
-    scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE'],
+    #scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE'],
+    scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE', "SIC Accuracy"],
                                        data=results_per_scene)
     # Log table into wandb
     wandb.run.log({mode+' results table': scenes_results_table})
@@ -321,6 +383,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     combined_score, scores = compute_metrics(true=inf_ys_flat, pred=outputs_flat, charts=train_options['charts'],
                                              metrics=train_options['chart_metric'], num_classes=train_options['n_classes'])
     
+    accuracy = accuracy_metric(preds_SIC_class, target_SIC_class)
+    #scene_results2 = [x.item() for x in scores.values()]
+    #print("FULL DATASET SCENE SCORES")
+    #print(scene_results2)    
     # Release 
     torch.cuda.empty_cache()
 
@@ -405,7 +471,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             wandb.run.summary[f"{test_name}/{chart}: classwise score:"] = classwise_scores[chart]
             print(
                 f"{test_name}/{chart}: classwise score: = {classwise_scores[chart]}")
-
+    ### NEW ###
+    wandb.run.summary[f"{test_name}/SIC Accuracy"] = accuracy
+    print(f"SIC Accuracy: {accuracy:.3f}%")
+    ### NEW ###
     #wandb.run.summary[f"{test_name}/Water Consistency Accuarcy"] = water_edge_accuarcy
     #print(
     #    f"{test_name}/Water Consistency Accuarcy = {water_edge_accuarcy}")
@@ -416,7 +485,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         artifact.add(table, experiment_name+'_val')
     
     wandb.log_artifact(artifact)
-
+  
     # # - Save upload_package with zlib compression.
     if train_options['save_nc_file']:
         print('Saving upload_package. Compressing data with zlib.')

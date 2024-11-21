@@ -341,7 +341,7 @@ train_options = {
 
     'chart_metric_individual_scenes': {  # Metric functions for each ice parameter and the associated weight.
         'SIC': {
-            'func': r2_metric_rand,
+            'func': r2_metric_rand, #r2_metric
             'weight': 2,
         },
         'SOD': {

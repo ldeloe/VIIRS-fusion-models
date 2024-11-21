@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.utils.data as data
-from torchmetrics.functional import r2_score, f1_score
+from torchmetrics.functional import r2_score, f1_score, accuracy
 from tqdm import tqdm  # Progress bar
 # -- Proprietary modules -- #
 
@@ -38,6 +38,52 @@ def chart_cbar(ax, n_classes, chart, cmap='vridis'):
     cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=arranged, fraction=0.0485, pad=0.049, ax=ax)
     cbar.set_label(label=ICE_STRINGS[chart])
     cbar.set_ticklabels(list(GROUP_NAMES[chart].values()))
+
+def cbar_ice_classification(ax, n_classes, cmap='vridis'):
+
+    """
+    Create discrete colourbar for plot with the sea ice parameter class names.
+
+    Parameters
+    ----------
+    n_classes: int
+        Number of classes for the chart parameter.
+    chart: str
+        The relevant chart.
+    """
+    LABELS = {0: 'Water', 1: 'Marginal\n Ice', 2: 'Consolidated\n Ice'}
+    CLABEL = 'Ice Classification'
+    arranged = np.arange(0, n_classes)
+    cmap = plt.get_cmap(cmap, n_classes - 1)
+    # Get colour boundaries. -0.5 to center ticks for each color.
+    norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
+    arranged = arranged[:-1]  # Discount the mask class.
+    cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=arranged, fraction=0.0485, pad=0.049, ax=ax)
+    cbar.set_label(label= CLABEL)
+    cbar.set_ticklabels(list(LABELS.values()))
+
+def classify_from_SIC(SIC):
+    #SIC_classes = torch.zeros_like(SIC_tensor, dtype=torch.int32)
+    SIC_classes = np.zeros_like(SIC, dtype=int)
+    SIC_classes[(SIC > 2) & (SIC <= 8)] = 1  # 2 < x <= 8 mapped to class 1
+    SIC_classes[(SIC > 8) & (SIC <= 100)] = 2  # 8 < x <= 100 mapped to class 2
+    SIC_classes[SIC == 255] = 255
+    return SIC_classes
+
+def classify_SIC_tensor(data):
+  class_data = torch.zeros_like(data, dtype=torch.int32)
+
+  class_data[(data > 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
+  class_data[(data > 8) & (data <= 100)] = 2   # 8 < x <= 100 -> 2
+  class_data[data == 255] = 255
+
+  return class_data
+
+def accuracy_metric(preds,target):
+  acc = accuracy(preds,target, task="multiclass", num_classes=3)
+  acc = float(acc)*100
+
+  return acc
 
 def compute_metrics(true, pred, charts, metrics, num_classes):
 
@@ -115,6 +161,9 @@ def r2_metric_rand(true, pred, num_classes):
     else:
         r2 = torch.tensor(float("nan"))
 
+    print("R2 METRIC RAND")
+    print(r2)
+
     return r2
 
 def r2_metric(true, pred, num_classes=None):
@@ -140,6 +189,9 @@ def r2_metric(true, pred, num_classes=None):
 
     """
     r2 = r2_score(preds=pred, target=true)
+
+    print("R2 METRIC")
+    print(r2)
 
     return r2
 
@@ -357,24 +409,22 @@ def create_train_validation_and_test_scene_list(train_options):
         '''
 
         ### Select a random number of validation scenes with the same seed ###
-        #train_options['validate_list'] = np.random.choice(np.array(
-        #    train_options['train_list']), size=train_options['p-out'], replace=False)
-        #train_options['validate_list_viirs'] = np.random.choice(np.array(
-        #    train_options['train_viirs']), size=train_options['p-out'], replace=False)
+        #train_options['validate_list'] = np.random.choice(np.array(train_options['train_list']), size=train_options['p-out'], replace=False)
+        #train_options['validate_list_viirs'] = np.random.choice(np.array(train_options['train_viirs']), size=train_options['p-out'], replace=False)
         ### Select a random number of validation scenes with the same seed ###
 
         ### Randomly generated validation set ###
-        #random_indices = np.random.choice(len(np.array(train_options['train_list'])), size=train_options['p-out'], replace=False)
-        #train_options['validate_list'] = np.array(train_options['train_list'])[random_indices]
+        random_indices = np.random.choice(len(np.array(train_options['train_list'])), size=train_options['p-out'], replace=False)
+        train_options['validate_list'] = np.array(train_options['train_list'])[random_indices]
             ### VIIRS ###
-        #train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[random_indices]
+        train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[random_indices]
             ### VIIRS ###
         ### Randomly generated validation set ###
 
         ### Set validation set ###
-        train_options['validate_list'] = np.array(train_options['train_list'])[10:15]
+        #train_options['validate_list'] = np.array(train_options['train_list'])[24:36]
             ### VIIRS ###
-        train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[10:15]
+        #train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[24:36]
             ### VIIRS ###
         ### Set validation set ###
         
