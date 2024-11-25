@@ -285,7 +285,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
 
         ### ADD NEW CLASSIFICATION FOR SIC METRIC ###
-        fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=1, figsize=(5, 14))
+        fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=2, figsize=(10, 10)) # (5, 14)
         axs_SIC_classes = axs2d_SIC_classes.flat
         ## SIC CLASSIFICATION ##
         n_classes = 4
@@ -294,7 +294,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         print('cfv_masks[SIC]: ', cfv_masks['SIC'])
         #output_class['SIC'] = output_class['SIC'].astype(float)
         converted_SIC = converted_SIC.astype(float)
-        converted_SIC[cfv_masks['SIC']] = np.nan ### Still working on this!!
+        converted_SIC[cfv_masks['SIC']] = np.nan
 
         ax_SIC.imshow(converted_SIC, vmin=0, vmax=n_classes - 2, cmap='jet', interpolation='nearest')
         ax_SIC.set_xticks([])
@@ -302,7 +302,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         ax_SIC.set_title('Model Prediction') # removed square brackets
         cbar_ice_classification(ax=ax_SIC, n_classes=n_classes, cmap='jet')
         ## ICE CHART ##
-        ax_SIC = axs_SIC_classes[1]
+        ax_SIC = axs_SIC_classes[2]
         converted_GT = classify_from_SIC(inf_y['SIC'])
         converted_GT = converted_GT.astype(float)
         converted_GT[cfv_masks['SIC']] = np.nan
@@ -312,8 +312,28 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         ax_SIC.set_title('Ground Truth')
         cbar_ice_classification(ax=ax_SIC, n_classes=n_classes, cmap='jet')               
 
-        plt.subplots_adjust(left=0, bottom=0, right=1, top=0.75, wspace=0.5, hspace=-0)
-        fig_SIC_classes.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Classification.png",
+        # SIC Prediction
+        ax_SIC = axs_SIC_classes[1]
+        output_class['SIC'] = output_class['SIC'].astype(float)
+        output_class['SIC'][cfv_masks['SIC']] = np.nan
+        ax_SIC.imshow(output_class['SIC'], vmin=0, vmax=train_options['n_classes']['SIC'] - 2, cmap='jet', interpolation='nearest')
+        ax_SIC.set_xticks([])
+        ax_SIC.set_yticks([])
+        ax_SIC.set_title('Model Prediction')
+        chart_cbar(ax=ax_SIC, n_classes=train_options['n_classes']['SIC'], chart=chart, cmap='jet')
+
+        # SIC Ice Chart
+        ax_SIC = axs_SIC_classes[3]
+        inf_y['SIC'] = inf_y['SIC'].astype(float)
+        inf_y['SIC'][cfv_masks['SIC']] = np.nan
+        ax_SIC.imshow(inf_y['SIC'], vmin=0, vmax=train_options['n_classes']['SIC'] - 2, cmap='jet', interpolation='nearest')
+        ax_SIC.set_xticks([])
+        ax_SIC.set_yticks([])
+        ax_SIC.set_title('Ground Truth')
+        chart_cbar(ax=ax_SIC, n_classes=train_options['n_classes']['SIC'], chart=chart, cmap='jet')
+
+        plt.subplots_adjust(left=0, bottom=0, right=1, top=0.75, wspace=0.25, hspace=0.15)
+        fig_SIC_classes.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Classification-R2.png",
                     format='png', dpi=150, bbox_inches="tight")
         plt.close('all')
         ### ADD NEW CLASSIFICATION FOR SIC METRIC ###

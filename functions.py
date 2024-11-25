@@ -57,7 +57,8 @@ def chart_cbar(ax, n_classes, chart, cmap='vridis'):
     norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
     arranged = arranged[:-1]  # Discount the mask class.
     cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=arranged, fraction=0.0485, pad=0.049, ax=ax)
-    cbar.set_label(label=ICE_STRINGS[chart])
+    cbar.ax.tick_params(labelsize=12)
+    cbar.set_label(label=ICE_STRINGS[chart], fontsize=12)
     cbar.set_ticklabels(list(GROUP_NAMES[chart].values()))
 
 def cbar_ice_classification(ax, n_classes, cmap='vridis'):
@@ -80,14 +81,15 @@ def cbar_ice_classification(ax, n_classes, cmap='vridis'):
     norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
     arranged = arranged[:-1]  # Discount the mask class.
     cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=arranged, fraction=0.0485, pad=0.049, ax=ax)
-    cbar.set_label(label= CLABEL)
+    cbar.ax.tick_params(labelsize=12)
+    cbar.set_label(label= CLABEL, fontsize=12)
     cbar.set_ticklabels(list(LABELS.values()))
 
 def classify_from_SIC(SIC):
     #SIC_classes = torch.zeros_like(SIC_tensor, dtype=torch.int32)
     SIC_classes = np.zeros_like(SIC, dtype=int)
-    SIC_classes[(SIC > 2) & (SIC <= 8)] = 1  # 2 < x <= 8 mapped to class 1
-    SIC_classes[(SIC > 8) & (SIC <= 100)] = 2  # 8 < x <= 100 mapped to class 2
+    SIC_classes[(SIC >= 2) & (SIC <= 8)] = 1  # marginal ice
+    SIC_classes[(SIC > 8) & (SIC <= 100)] = 2  # consolidated ice
     SIC_classes[SIC == 255] = 255
     return SIC_classes
 
