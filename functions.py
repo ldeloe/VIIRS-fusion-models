@@ -96,7 +96,7 @@ def classify_from_SIC(SIC):
 def classify_SIC_tensor(data):
   class_data = torch.zeros_like(data, dtype=torch.int32)
 
-  class_data[(data > 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
+  class_data[(data >= 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
   class_data[(data > 8) & (data <= 100)] = 2   # 8 < x <= 100 -> 2
   class_data[data == 255] = 255
 
