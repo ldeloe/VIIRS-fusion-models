@@ -4,7 +4,7 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --cpus-per-task=12 # change this parameter to 2,4,6,... and increase "--num_workers" accordingly to see the effect on performance
 #SBATCH --mem=128G
-#SBATCH --time=8:00:00
+#SBATCH --time=0:30:00
 #SBATCH --output=/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/compute_canada_output/%j.out
 #SBATCH --account=def-ka3scott
 #SBATCH --mail-user=lcbdeloe@uwaterloo.ca
@@ -30,7 +30,11 @@ echo "starting training..."
 
 #python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_cross_val.py"  --wandb-project='w-net-cross-validation'
 #python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_sic_class_fig.py"  --wandb-project='test-SIC-acc'
-python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_bar_charts.py"  --wandb-project='test-SIC-acc'
+
+
+#python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_bar_charts.py"  --wandb-project='test-SIC-acc'
+python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_test_ist_plot.py"  --wandb-project='test-SIC-acc'
+
 
 #python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_sic_class_acc.py"  --wandb-project='test-SIC-acc'
 

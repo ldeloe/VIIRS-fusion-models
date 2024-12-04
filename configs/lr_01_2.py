@@ -41,18 +41,13 @@ SCENE_VARIABLES = [
 train_options = {'train_variables': SCENE_VARIABLES,
                  'path_to_train_data': 'dataset',
                  'path_to_test_data': 'dataset',
-                 'train_list_path': 'datalists/train_dataset.json', #test_train.json', #
-                 #'val_path': 'datalists/validation_dataset.json', #
-                 #'test_path': 'datalists/test_dataset.json', #
-                 'val_path': 'datalists/test_dataset.json', #'datalists/validation_dataset.json', #
-                 'test_path': 'datalists/validation_dataset.json', #'datalists/test_dataset.json', #
+                 'train_list_path': 'datalists/train_dataset.json', 
+                 'val_path': 'datalists/test_dataset.json', 
+                 'test_path': 'datalists/validation_dataset.json', 
 
-                 'train_viirs': 'datalists/train_dataset_viirs.json', #
-                 'test_viirs': 'datalists/validation_dataset_viirs.json', #'datalists/test_dataset_viirs.json', #test_viirs.json',#
-                 'validate_viirs': 'datalists/test_dataset_viirs.json', #'datalists/validation_dataset_viirs.json', #validate_viirs.json',#
-                 #'train_viirs': 'datalists/train_dataset_viirs.json', #
-                 #'test_viirs': 'datalists/test_dataset_viirs.json', #test_viirs.json',#
-                 #'validate_viirs': 'datalists/validation_dataset_viirs.json', #validate_viirs.json',#
+                 'train_viirs': 'datalists/train_dataset_viirs.json',
+                 'test_viirs': 'datalists/validation_dataset_viirs.json', 
+                 'validate_viirs': 'datalists/test_dataset_viirs.json', 
 
 
                  # p leave out cross val run

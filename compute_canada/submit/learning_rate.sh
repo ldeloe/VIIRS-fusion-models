@@ -29,7 +29,9 @@ cd /home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/
 echo "starting training..."
 
 #python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/lr_1.py" --wandb-project='hpt-learning-rate'
-python launch.py $1 --wandb-project='hpt-learning-rate'
+#python launch.py $1 --wandb-project='hpt-learning-rate'
+python launch.py "/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/configs/opt_adamw_base_lr_sched.py" --wandb-project='ai4arctic-plus-viirs-unet-hpt'
+
 
 
 

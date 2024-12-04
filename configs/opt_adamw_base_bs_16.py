@@ -77,7 +77,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                      'lr_min': 0,  # Minimun learning rate
                  },
 
-                 'batch_size': 4, #16,
+                 'batch_size': 16, #16,
                  'num_workers': 4,  # Number of parallel processes to fetch data.
                  'num_workers_val': 4,  # Number of parallel processes during validation.
                  'patch_size': 256,
@@ -97,8 +97,8 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'model_selection': 'unet_regression', #'wnet',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'deconv_filters': [96, 128, 192, 192], # use if there's a mismatch with channels. corresponds with encoding [32,32,64,64]
-                 'epochs': 10,  # Number of epochs before training stop.
-                 'epoch_len': 50,  # Number of batches for each epoch.
+                 'epochs': 300,  # Number of epochs before training stop.
+                 'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
                  'task_weights': [1, 3, 3],
                  'chart_loss': {  # Loss for the task

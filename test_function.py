@@ -5,6 +5,7 @@ import os.path as osp
 
 # -- Third-part modules -- #
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import torch
 import xarray as xr
@@ -175,14 +176,29 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
         for j in range(0, 3): # don't know what to put in the spot that was the water edge overlay
             ax = axs[j]
-            img = torch.squeeze(inf_x, dim=0).cpu().numpy()[j]
+            if j == 2:
+                img = torch.squeeze(inf_x, dim=0).cpu().numpy()[4]
+                ax.imshow(img)
+
+                #ax.imshow(img, cmap='gnuplot2_r')
+                #arranged = np.arange(0, len(np.unique(img)))
+                #cmap = plt.get_cmap('gnuplot2_r', len(np.unique(img))-1)
+                #norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
+                #arranged = arranged[:-1]
+                #cbar = plt.colorbar(mappable = mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax) #, ticks = arranged, fraction=0.0485, pad=0.049, ax=ax)
+            else:
+                img = torch.squeeze(inf_x, dim=0).cpu().numpy()[j]
+                ax.imshow(img, cmap='gray')
+
             if j == 0:
                 ax.set_title(f'Scene {scene_name}, HH')
-            else:
+            elif j == 1:
                 ax.set_title(f'Scene {scene_name}, HV')
+            else:
+                ax.set_title(f'Scene {scene_name}, 18.7 H') #IST')
             ax.set_xticks([])
             ax.set_yticks([])
-            ax.imshow(img, cmap='gray')
+            
 
 
         for idx, chart in enumerate(train_options['charts']):
