@@ -57,7 +57,8 @@ train_options = {'train_variables': SCENE_VARIABLES,
 
                  # p leave out cross val run
                  'cross_val_run': False,
-                 'p-out': 5, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
+                 'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
+                 'p-fold': 0,
                  'compute_classwise_f1score': True,
                  'plot_confusion_matrix': True,
 
@@ -71,13 +72,13 @@ train_options = {'train_variables': SCENE_VARIABLES,
 
                  'scheduler': {
                      'type': 'CosineAnnealingWarmRestartsLR',  # Name of the schedulers
-                     'EpochsPerRestart': 20,  # Number of epochs for the first restart
+                     'EpochsPerRestart': 10,  # Number of epochs for the first restart
                      # This number will be used to increase or descrase the number of epochs to restart after each restart.
-                     'RestartMult': 1,
+                     'RestartMult': 2,
                      'lr_min': 0,  # Minimun learning rate
                  },
 
-                 'batch_size': 16, #16,
+                 'batch_size': 32, #16,
                  'num_workers': 4,  # Number of parallel processes to fetch data.
                  'num_workers_val': 4,  # Number of parallel processes during validation.
                  'patch_size': 256,

@@ -1,5 +1,8 @@
 # -- Built-in modules -- #
 import os
+
+import os.path as osp
+
 import json
 import xarray as xr
 # -- Third-party modules -- #
@@ -16,6 +19,7 @@ from utils import ICE_STRINGS, GROUP_NAMES
 from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_feature_fusion
 from wnet import WNet
 from wnet_separate_decoders import WNet_Separate_Decoders
+from wnet_separate_viirs import WNet_Separate_VIIRS
 
 from r2_replacement import r2_score_random 
 
@@ -450,7 +454,7 @@ def create_train_validation_and_test_scene_list(train_options):
                     pixels_per_class[idx][i] += n_class
                     n_pixels[idx] += n_class
 
-        title = './work_dir/opt_test_bar_charts/train_bar_charts'
+        title = './work_dir/opt_test_bar_charts/train_bar_charts' # note that this needs to change in future
         for idx, chart in enumerate(train_options['charts']):
             generate_pixels_per_class_bar_graph(chart, pixels_per_class[idx][0:train_options['n_classes'][chart] - 1], n_pixels[idx], x_axis_label[idx], bar_widths[idx], title)
     ##############################################################
@@ -469,17 +473,23 @@ def create_train_validation_and_test_scene_list(train_options):
         ### Select a random number of validation scenes with the same seed ###
 
         ### Randomly generated validation set ###
-        random_indices = np.random.choice(len(np.array(train_options['train_list'])), size=train_options['p-out'], replace=False)
-        train_options['validate_list'] = np.array(train_options['train_list'])[random_indices]
+        #random_indices = np.random.choice(len(np.array(train_options['train_list'])), size=train_options['p-out'], replace=False)
+        #train_options['validate_list'] = np.array(train_options['train_list'])[random_indices]
             ### VIIRS ###
-        train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[random_indices]
+        #train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[random_indices]
             ### VIIRS ###
         ### Randomly generated validation set ###
 
         ### Set validation set ###
-        #train_options['validate_list'] = np.array(train_options['train_list'])[24:36]
-            ### VIIRS ###
-        #train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[24:36]
+        if train_options['p-fold'] == 48:
+            print('last file in fold 48 causes an error')
+            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+11] #+11] for 48
+                ### VIIRS ###
+            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+11] #+11] for 48
+        else:
+            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+12] #+11] for 48
+                ### VIIRS ###
+            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+12] #+11] for 48
             ### VIIRS ###
         ### Set validation set ###
         
@@ -614,6 +624,8 @@ def get_model(train_options, device):
         net = WNet(options=train_options).to(device)
     elif train_options['model_selection'] == 'wnet-separate-decoders':
         net = WNet_Separate_Decoders(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-viirs':
+        net = WNet_Separate_VIIRS(options=train_options).to(device)
     else:
         raise 'Unknown model selected'
     return net

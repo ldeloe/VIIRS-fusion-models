@@ -41,18 +41,19 @@ SCENE_VARIABLES = [
 train_options = {'train_variables': SCENE_VARIABLES,
                  'path_to_train_data': 'dataset',
                  'path_to_test_data': 'dataset',
-                 'train_list_path': 'datalists/train_dataset.json', #test_train.json', #
+                 'train_list_path': 'datalists/train_dataset.json', #'datalists/train_dataset_cross_validation.json', #'datalists/train_dataset.json', #test_train.json', #
                  'val_path': 'datalists/test_dataset.json', #
                  'test_path': 'datalists/validation_dataset.json', #
 
-                 'train_viirs': 'datalists/train_dataset_viirs.json', #
+                 'train_viirs': 'datalists/train_dataset_viirs.json', #'datalists/train_dataset_viirs_cross_validation.json', #'datalists/train_dataset_viirs.json', #
                  'test_viirs': 'datalists/validation_dataset_viirs.json', #test_viirs.json',#
                  'validate_viirs': 'datalists/test_dataset_viirs.json', #validate_viirs.json',#
 
 
                  # p leave out cross val run
                  'cross_val_run': False,
-                 'p-out': 5, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
+                 'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
+                 'p-fold': 48,
                  'compute_classwise_f1score': True,
                  'plot_confusion_matrix': True,
 
@@ -90,7 +91,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                      'Cutmix_prob': 0.5,
                  },
                  # -- Model selection -- #
-                 'model_selection': 'unet_regression',#'unet_feature_fusion', #'unet_regression',
+                 'model_selection': 'wnet-separate-viirs', #'unet_regression',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'epochs': 300,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
