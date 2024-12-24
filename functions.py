@@ -20,6 +20,7 @@ from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_fea
 from wnet import WNet
 from wnet_separate_decoders import WNet_Separate_Decoders
 from wnet_separate_viirs import WNet_Separate_VIIRS
+from wnet_uncertainty import WNet_Uncertainty
 
 from r2_replacement import r2_score_random 
 
@@ -183,6 +184,9 @@ def r2_metric_rand(true, pred, num_classes):
         The calculated r2 score.
 
     """
+    print("R2 metric rand")
+    print("pred", len(pred))
+    print("true", len(true))
     if (not len(pred)==0) and not (len(true)==0):
         r2 = r2_score_random(preds=pred, target=true,num_classes=num_classes)
     else:
@@ -217,8 +221,12 @@ def r2_metric(true, pred, num_classes=None):
     """
     r2 = r2_score(preds=pred, target=true)
 
-    print("R2 METRIC")
+    print("R2 METRIC pre change")
     print(r2)
+
+
+    #print("NANNNNNN change after debugging")
+    #return torch.tensor(float(0))
 
     return r2
 
@@ -403,6 +411,8 @@ def compute_classwise_f1score(true, pred, charts, num_classes):
     """
     score = {}
     for chart in charts:
+        print(chart)
+        print(num_classes[chart])
         score[chart] = f1_score(target=true[chart], preds=pred[chart], average='none',
                                 task='multiclass', num_classes=num_classes[chart])
     return score
@@ -604,6 +614,10 @@ def get_loss(loss, chart=None, **kwargs):
         from losses import MSELossWithIgnoreIndex
         kwargs.pop('type')
         loss = MSELossWithIgnoreIndex(**kwargs)
+    elif loss == 'GaussianNLLLossWithIgnoreIndex':
+        from losses import GaussianNLLLossWithIgnoreIndex
+        kwargs.pop('type')
+        loss = GaussianNLLLossWithIgnoreIndex(**kwargs)
     else:
         raise ValueError(f'The given loss \'{loss}\' is unrecognized or Not implemented')
 
@@ -626,6 +640,8 @@ def get_model(train_options, device):
         net = WNet_Separate_Decoders(options=train_options).to(device)
     elif train_options['model_selection'] == 'wnet-separate-viirs':
         net = WNet_Separate_VIIRS(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-uncertainty':
+        net = WNet_Uncertainty(options=train_options).to(device)
     else:
         raise 'Unknown model selected'
     return net

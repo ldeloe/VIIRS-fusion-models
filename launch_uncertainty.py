@@ -14,7 +14,7 @@ import wandb
 from mmcv import Config, mkdir_or_exist
 
 from functions import compute_metrics, save_best_model, load_model, class_decider, \
-create_train_validation_and_test_scene_list, get_scheduler, get_optimizer, get_loss, get_model
+create_train_validation_and_test_scene_list, get_scheduler, get_optimizer, get_loss, get_model, accuracy_metric, classify_SIC_tensor
 
 # Note: may need in future
 #\ slide_inference, batched_slide_inference
@@ -22,16 +22,15 @@ create_train_validation_and_test_scene_list, get_scheduler, get_optimizer, get_l
 from loaders import get_variable_options, TrainValDataset, TestDataset
 
 from utils import colour_str
-from test_function import test
+from test_function_uncertainty import test
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Default U-NET segmentor')
 
     # Mandatory arguments
-    parser.add_argument('config', type=pathlib.Path, help='train config file path') #,)
+    parser.add_argument('config', type=pathlib.Path, help='train config file path',)
     parser.add_argument('--wandb-project', required=True, help='Name of wandb project')
     parser.add_argument('--work-dir', help='the dir to save logs and models')
-    #parser.add_argument('sweep', help='sweep tester')
     parser.add_argument('--seed', default=None,
                         help='the seed to use, if not provided, seed from config file will be taken')
     group = parser.add_mutually_exclusive_group()
@@ -40,7 +39,6 @@ def parse_args():
                         optimizer and schduler defined on checkpoint')
     group.add_argument('--finetune-from', type=pathlib.Path, default=None,
                        help='Start new tranining using the weights from checkpoitn')
-    parser.add_argument('sweep', type=pathlib.Path, default =None, help='defualt for sweep',)
 
     args = parser.parse_args()
 
@@ -86,10 +84,17 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 output = net(batch_x)
                 # - Calculate loss.
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-                    
-                    #### EDIT HERE GAUSSIANNLLLOSS ###
-                    cross_entropy_loss += weight * loss_ce_functions[chart](
-                        output[chart], batch_y[chart].to(device))
+                    if train_options['uncertainty'] != 0 and chart == 'SIC':
+                        #print('SIC Uncertainty')
+                        #print(output['SIC'].size())
+                        #print("UNIQUE VALS MEAN: ", torch.unique(output[chart][..., 0].unsqueeze(-1)))
+                        #print("UNIQUE VALS VAR: ", torch.unique(output[chart][..., 1].unsqueeze(-1)))
+
+                        cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart][..., 0].unsqueeze(-1).to(device), batch_y[chart].to(device), output[chart][..., 1].unsqueeze(-1).to(device))      #added to device                   
+                    else:
+                        cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart], batch_y[chart].to(device))
 
             # Note: removed water edge loss; this conditional is a renment and could be removed in future
             #if train_options['edge_consistency_loss'] != 0:
@@ -98,7 +103,6 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             #else:
             #    train_loss_batch = cross_entropy_loss
             train_loss_batch = cross_entropy_loss
-
             # - Reset gradients from previous pass.
             optimizer.zero_grad()
 
@@ -125,6 +129,12 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
         # - Stores the output and the reference pixels to calculate the scores after inference on all the scenes.
         outputs_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
         inf_ys_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
+
+        ### NEW ###
+        preds_SIC_class = torch.Tensor().to(device)
+        target_SIC_class = torch.Tensor().to(device)
+        ### NEW ###
+
         # Outputs mask by train fill values
         outputs_tfv_mask = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
         net.eval()  # Set network to evaluation mode.
@@ -147,10 +157,11 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                     output = net(inf_x)
 
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-
-                    #### EDIT CODE HERE TO IMPLEMENT GAUSSIANNLLLOSS ####
-
-                    val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
+                    if train_options['uncertainty'] != 0 and chart == 'SIC':
+                        val_cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart][..., 0].unsqueeze(-1).to(device), inf_y[chart].unsqueeze(0).long().to(device), output[chart][..., 1].unsqueeze(-1).to(device))                        
+                    else:
+                        val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
                                                                                 inf_y[chart].unsqueeze(0).long().to(device))
 
                 # Note: again, a remnent from removing the water loss
@@ -161,11 +172,38 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
 
             # - Final output layer, and storing of non masked pixels.
             for chart in train_options['charts']:
-                output[chart] = class_decider(output[chart], train_options, chart)
+                #print("CHART: ", chart)
+                #output[chart] = class_decider(output[chart], train_options, chart)
+                if train_options['uncertainty'] != 0 and chart == 'SIC':
+                    #print("UNIQUE BEFORE CLASS DECIDER")
+                    #print(torch.unique(output[chart]))
+                    output[chart] = class_decider(output[chart][..., 0].unsqueeze(-1).to(device), train_options, chart)
+                    #print(output[chart].size())
+                    #print("UNIQUE CLASS DECIDER VALS")
+                    #print(torch.unique(output[chart]))
+                else:
+                    #print("UNIQUE OUTPUT")
+                    #print(torch.unique(output[chart]))
+                    output[chart] = class_decider(output[chart], train_options, chart)
+                    #print(output[chart].size())
+
                 outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart][~cfv_masks[chart]]))
+                #print(outputs_flat[chart].size())
+
                 outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], output[chart][~tfv_mask]))
                 inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y[chart]
                                                 [~cfv_masks[chart]].to(device, non_blocking=True)))
+                #print(inf_ys_flat[chart].size())
+            
+            #print(outputs_flat.size())
+            #print(inf_ys_flat.size())
+            ### NEW ###
+            #output_preds = classify_SIC_tensor(output['SIC'][~cfv_masks['SIC']])
+            preds_SIC_class = classify_SIC_tensor(outputs_flat['SIC']) #torch.cat((preds_SIC_class, output_preds))#[~cfv_masks['SIC']])) 
+            #inf_ys_flat_target = classify_SIC_tensor(inf_ys_flat['SIC'][~cfv_masks['SIC']])
+            target_SIC_class = classify_SIC_tensor(inf_ys_flat['SIC']) #torch.cat((target_SIC_class, inf_ys_flat_target)) #[~cfv_masks['SIC']]))
+            ### NEW ###  
+
             # - Add batch loss.
             val_loss_sum += val_loss_batch.detach().item()
             val_cross_entropy_loss_sum += val_cross_entropy_loss.detach().item()
@@ -186,8 +224,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
         if train_options['compute_classwise_f1score']:
             from functions import compute_classwise_f1score
             # dictionary key = chart, value = tensor; e.g  key = SOD, value = tensor([0, 0.2, 0.4, 0.2, 0.1])
-            classwise_scores = compute_classwise_f1score(true=inf_ys_flat, pred=outputs_flat,
-                                                         charts=train_options['charts'], num_classes=train_options['n_classes'])
+            classwise_scores = compute_classwise_f1score(true=inf_ys_flat, pred=outputs_flat, charts=train_options['charts'], num_classes=train_options['n_classes'])
         print("")
         print(f"Epoch {epoch} score:")
 
@@ -202,6 +239,12 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 for index, class_score in enumerate(classwise_scores[chart]):
                     wandb.log({f"{chart}/Class: {index}": class_score.item()}, step=epoch)
                 print(f"{chart} F1 score:", classwise_scores[chart])
+        
+        ### NEW ###
+        accuracy = accuracy_metric(preds_SIC_class, target_SIC_class)
+        wandb.log({f"SIC Accuracy": accuracy}, step=epoch)
+        print(f"SIC Accuracy: {accuracy:.3f}%")
+        ### NEW ###
 
         print(f"Combined score: {combined_score}%")
         print(f"Train Epoch Loss: {train_loss_epoch:.3f}")
@@ -255,6 +298,7 @@ def create_dataloaders(train_options):
     return dataloader_train, dataloader_val
 
 def main():
+    print("Entered main")
     args = parse_args()
     ic(args.config)
     cfg = Config.fromfile(args.config)
@@ -264,7 +308,7 @@ def main():
 
     
     # generate wandb run id, to be used to link the run with test_upload
-    #id = wandb.util.generate_id()
+    id = wandb.util.generate_id()
 
     # Set the seed if not -1
     if train_options['seed'] != -1 and args.seed == None:
@@ -293,7 +337,7 @@ def main():
                                     osp.splitext(osp.basename(args.config))[0])
         else:
             # from utils import run_names
-            #run_name = id
+            run_name = id
             cfg.work_dir = osp.join('./work_dir',
                                     osp.splitext(osp.basename(args.config))[0], run_name)
 
@@ -346,25 +390,14 @@ def main():
         print(f"\033[91m Finetune model from {args.finetune_from}\033[0m")
         _ = load_model(net, args.finetune_from)
 
-    ####--------------------- HYPER-PARAMETING TUNING ---------------------####
-    run_name = ''
-
-    print("initializing wandb hyper-parameter tuning run")
-    if args.sweep:
-        run = wandb.init(project=args.wandb_project, entity = "sic-data-fusion", config = train_options) #(config = config)
-        args.lr = wandb.config.lr
-        args.batch_size = wandb.config.batch_size
-        run_name = run._run_id
-
-    
     # initialize wandb run
-    #print("start initializing wandb run")
-    #if not train_options['cross_val_run']:
-    #    wandb.init(name=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
-    #               entity="sic-data-fusion", config=train_options, id=id, resume="allow")
-    #else:
-    #    wandb.init(name=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
-    #               entity="sic-data-fusion", config=train_options, id=id, resume="allow")
+    print("start initializing wandb run")
+    if not train_options['cross_val_run']:
+        wandb.init(name=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
+                   entity="sic-data-fusion", config=train_options, id=id, resume="allow")
+    else:
+        wandb.init(name=osp.splitext(osp.basename(args.config))[0], project=args.wandb_project,
+                   entity="sic-data-fusion", config=train_options, id=id, resume="allow")
 
     # Define the metrics and make them such that they are not added to the summary
     wandb.define_metric("Train Epoch Loss", summary="none")
@@ -376,6 +409,7 @@ def main():
     wandb.define_metric("SOD f1_metric", summary="none")
     wandb.define_metric("FLOE f1_metric", summary="none")
     wandb.define_metric("Learning Rate", summary="none")
+    wandb.define_metric("SIC Accuracy", summary="none")
 
     wandb.save(str(args.config))
     print(colour_str('Save Config File', 'green'))
@@ -440,40 +474,5 @@ def main():
     wandb.finish()
 
 
-#if __name__ == '__main__':
-#    main()
 if __name__ == '__main__':
-
-
-    args = ()
-
-
-    if args.sweep:
-
-        #%% HYPER-PARAMETER TUNNING
-
-        sweep_configuration = {
-
-            'method': 'random',
-
-            'name': 'sweep',
-
-            'metric': {'goal': 'minimize', 'name': 'val_loss'},
-
-            'parameters': {
-
-                'lr':           {'min': 1e-6, 'max': 1e-3,  'distribution': 'uniform'},
-
-                'batch_size':   {'values': [4, 8, 16, 32]}
-
-            }
-
-        }
-
-        sweep_id = wandb.sweep(sweep=sweep_configuration, project='hpt-test')
-
-        wandb.agent(sweep_id, function=main, count=1)
-
-    else:
-
-        main()
+    main()

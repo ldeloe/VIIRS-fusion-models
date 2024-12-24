@@ -84,10 +84,13 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 output = net(batch_x)
                 # - Calculate loss.
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-
+                    #if train_options['uncertainty'] != 0 and chart == 'SIC':
+                    #    var = torch.var(output[chart],keepdim=True)
+                    #else:
+                    #    cross_entropy_loss += weight * loss_ce_functions[chart](
+                    #        output[chart], batch_y[chart].to(device))
                     cross_entropy_loss += weight * loss_ce_functions[chart](
                         output[chart], batch_y[chart].to(device))
-
             # Note: removed water edge loss; this conditional is a renment and could be removed in future
             #if train_options['edge_consistency_loss'] != 0:
             #    a = train_options['edge_consistency_loss']

@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import math
 
 
 class OrderedCrossEntropyLoss(nn.Module):
@@ -87,6 +88,9 @@ class MSELossFromLogits(nn.Module):
     #    return torch.mean((sic-sod)**2 + (sod-floe)**2 + (floe-sic)**2)
 
 # only applicable to regression outputs
+
+
+
 class MSELossWithIgnoreIndex(nn.MSELoss):
     def __init__(self, ignore_index=255, reduction='mean'):
         super(MSELossWithIgnoreIndex, self).__init__(reduction=reduction)
@@ -96,5 +100,153 @@ class MSELossWithIgnoreIndex(nn.MSELoss):
         mask = (target != self.ignore_index).type_as(input)
         diff = input.squeeze(-1) - target
         diff = diff * mask
-        loss = torch.sum(diff ** 2) / mask.sum()
+        loss = torch.sum(diff ** 2) / mask.sum() # / mask.sum() because mean reduction
+        return loss
+
+class GaussianNLLLossWithIgnoreIndex3(nn.Module):
+    def __init__(self, ignore_index=255, reduction='mean', eps=1e-3): # originally 1e-6 but ray used 1e-3
+        super(GaussianNLLLossWithIgnoreIndex3, self).__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.eps = eps  # small value to avoid log(0)
+
+    def forward(self, input, target, var):
+        # Remove the last channel of input and var to match target shape
+        #var = torch.nan_to_num(var, nan=self.eps)
+
+        # Check validity of reduction mode
+        #if reduction != "none" and reduction != "mean" and reduction != "sum":
+        #    raise ValueError(reduction + " is not valid")
+
+        # Clamp for stability
+        var = var.clone()
+        with torch.no_grad():
+            input = input.squeeze(-1)
+            var = var.squeeze(-1)
+            var.clamp_(min=self.eps)
+
+            # Apply mask to input and var
+            mask = (target != self.ignore_index).type_as(input)
+            diff = input - target
+            diff = diff * mask
+
+            log_var = torch.log(var)
+            masked_var = var * mask
+            masked_log_var = log_var * mask
+
+        # Entries of var must be non-negative
+        if torch.any(masked_var < 0):
+            raise ValueError("masked var has negative entry/entries")
+
+        # Calculate the loss
+        loss = 0.5 * (masked_log_var + diff ** 2 / masked_var)
+        #loss = 0.5 * (masked_log_var.sum() + torch.sum(diff ** 2) / masked_var.sum())
+        #loss = 0.5 * (masked_log_var.sum() + (diff ** 2 / masked_var).sum())
+        #if full:
+        #    loss += 0.5 * math.log(2 * math.pi)
+        #print("Loss before nan_to_num: ", loss)
+        # Replace NaN values with 0
+        #loss = torch.nan_to_num(loss, nan=0.0)
+        print("Total loss: ", loss.sum() / mask.sum())
+
+        if self.reduction == "mean":
+            return loss.sum() / mask.sum()
+        #elif reduction == "sum":
+        #    return loss.sum()
+        #else:
+        #    return loss
+
+class GaussianNLLLossWithIgnoreIndex2(nn.Module):
+    def __init__(self, ignore_index=255, reduction='mean', eps=1e-3): # originally 1e-6 but ray used 1e-3
+        super(GaussianNLLLossWithIgnoreIndex2, self).__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.eps = eps  # small value to avoid log(0)
+
+    def forward(self, input, target, var):
+
+        mask = (target != self.ignore_index).type_as(input)  # Binary mask for valid targets
+        #print("Unique values in mask: ", torch.unique(mask))
+        diff = input.squeeze(-1) - target
+        diff = diff * mask
+
+        var = var.clone()
+        var = var.squeeze(-1)
+        with torch.no_grad():
+            #max_var = torch.clamp(var.squeeze(-1), min=self.eps)
+            var.clamp_(min=self.eps)
+        
+        #var_data = var.squeeze(-1)
+        #print("VAR SQUEEZED attempt 2!")
+        masked_var = var * mask #.squeeze(-1) 
+        #print("Unique values in masked var: ", torch.unique(masked_var))
+
+        ## SEPARATE TO PREVENT LOG(0)
+        log_var = torch.log(var) #.squeeze(-1)) 
+        masked_log_var = log_var * mask
+
+        if torch.any(masked_var < 0):
+            raise ValueError("var after masking has negative entry/entries")
+        
+        loss = 0.5*(torch.nansum(masked_log_var) + torch.nansum(diff**2)/torch.nansum(masked_var))
+        #loss = 0.5 * (masked_log_var + diff**2 / masked_var)
+
+        #term = diff**2 / masked_var
+        #if torch.any(torch.isnan(term)):
+        #    print("NaN in diff**2 / masked_var")
+        #if torch.any(torch.isinf(term)):
+        #    print("Inf in diff**2 / masked_var")
+
+        #if torch.any(torch.isnan(loss)):
+        #    print("NaN Loss")
+            #loss += 0.5 * math.log(2 * math.pi)
+
+        # Reduce loss
+        if self.reduction == 'mean':
+            loss = loss / mask.sum()
+            #loss = torch.nansum(loss) / mask.sum() # omit masked pixels from mean calculation
+
+        #if torch.any(torch.isnan(var.squeeze(-1))):
+        #    print("NaN in clamped var")
+        #if torch.any(torch.isnan(masked_var)):
+        #    print("NaN in masked var")
+        #if torch.any(torch.isnan(masked_log_var)):
+        #    print("NaN masked log var")
+        #denominator = torch.sum(masked_var)
+        #if denominator == 0:
+        #    print("Masked variance has zero sum.")
+        if torch.any(torch.isnan(loss)):
+            print("Loss is still somehow NaN after mean")
+
+        return loss
+
+class GaussianNLLLossWithIgnoreIndex(nn.Module):
+    def __init__(self, ignore_index=255, reduction='mean', eps=1e-3): # originally 1e-6 but ray used 1e-3
+        super(GaussianNLLLossWithIgnoreIndex, self).__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.eps = eps  # small value to avoid log(0)
+
+    def forward(self, input, target, var):
+
+        mask = (target != self.ignore_index).type_as(input)  # Binary mask for valid targets
+        diff = input.squeeze(-1) - target
+        diff = diff * mask
+        max_var = torch.clamp(var.squeeze(-1), min=self.eps) # avoid log(0), divide by 0
+        masked_var = max_var * mask
+        #print("Unique values in masked var: ", torch.unique(masked_var))
+
+        ## SEPARATE TO PREVENT LOG(0)
+        log_var = torch.log(max_var) 
+        masked_log_var = log_var * mask
+
+        #loss = 0.5*(torch.sum(masked_log_var) + torch.sum(diff**2)/torch.sum(masked_var)) # this works but element-wise might be wrong
+        loss = 0.5*(torch.sum(masked_log_var) + torch.sum(diff**2/masked_var)) # results in nan
+
+        # Reduce loss
+        if self.reduction == 'mean':
+            loss = loss / mask.sum()
+
+        print("Total loss: ", loss)
+
         return loss

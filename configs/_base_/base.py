@@ -159,6 +159,7 @@ train_options = {
     'down_sample_scale': 10,
     'task_weights': [1, 1, 1],
     
+    'uncertainty': 0,
     # p leave out cross val run
     'cross_val_run': False,
     'p-out': 5, #20,
