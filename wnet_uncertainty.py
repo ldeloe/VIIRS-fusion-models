@@ -106,7 +106,15 @@ class WNet_Uncertainty(torch.nn.Module):
             x_expand = expand_block(x_expand, x_contract_sv[up_idx - 1],x_contract_aea[up_idx - 1])
             up_idx -= 1
 
-        return {'SIC': self.regression_layer(x_expand.permute(0, 2, 3, 1)),
+        # Predict mean and log-variance for SIC
+        sic_outputs = self.regression_layer(x_expand.permute(0, 2, 3, 1))
+        sic_mean = sic_outputs[..., 0]  # First output is mean
+        sic_log_variance = sic_outputs[..., 1]  # Second output is log-variance
+        sic_variance = torch.exp(sic_log_variance)  # Convert log-variance to variance
+
+        return {'SIC': {'mean': sic_mean, 'variance': sic_variance},
+
+        #return {'SIC': self.regression_layer(x_expand.permute(0, 2, 3, 1)),
                 'SOD': self.sod_feature_map(x_expand),
                 'FLOE': self.floe_feature_map(x_expand)}
 

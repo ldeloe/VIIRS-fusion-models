@@ -119,8 +119,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             else:
                 output = net(inf_x)
                 if train_options['uncertainty'] != 0:
-                    sic_output_var = output['SIC'][..., 1].unsqueeze(-1).to(device) # may not be needed
-                    output['SIC'] = output['SIC'][..., 0].unsqueeze(-1).to(device) 
+                    output['SIC'] = output['SIC']['mean'].unsqueeze(-1).to(device)  # Mean of SIC
+                    #sic_output_var = output['SIC']['variance'].unsqueeze(-1).to(device)  # Variance of SIC
+                    #sic_output_var = output['SIC'][..., 1].unsqueeze(-1).to(device) # may not be needed
+                    #output['SIC'] = output['SIC'][..., 0].unsqueeze(-1).to(device) 
 
             # Up sample the masks
             tfv_mask = torch.nn.functional.interpolate(tfv_mask.type(torch.uint8).unsqueeze(0).unsqueeze(0), size=original_size, mode='nearest').squeeze().squeeze().to(torch.bool)

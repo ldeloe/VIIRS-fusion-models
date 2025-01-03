@@ -618,6 +618,9 @@ def get_loss(loss, chart=None, **kwargs):
         from losses import GaussianNLLLossWithIgnoreIndex
         kwargs.pop('type')
         loss = GaussianNLLLossWithIgnoreIndex(**kwargs)
+    elif loss == 'GaussianNLLLoss':
+        kwargs.pop('type')
+        loss = torch.nn.GaussianNLLLoss(**kwargs)
     else:
         raise ValueError(f'The given loss \'{loss}\' is unrecognized or Not implemented')
 

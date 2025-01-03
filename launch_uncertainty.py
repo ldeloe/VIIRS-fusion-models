@@ -85,13 +85,20 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 # - Calculate loss.
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
                     if train_options['uncertainty'] != 0 and chart == 'SIC':
-                        #print('SIC Uncertainty')
-                        #print(output['SIC'].size())
-                        #print("UNIQUE VALS MEAN: ", torch.unique(output[chart][..., 0].unsqueeze(-1)))
-                        #print("UNIQUE VALS VAR: ", torch.unique(output[chart][..., 1].unsqueeze(-1)))
 
-                        cross_entropy_loss += weight * loss_ce_functions[chart](
-                            output[chart][..., 0].unsqueeze(-1).to(device), batch_y[chart].to(device), output[chart][..., 1].unsqueeze(-1).to(device))      #added to device                   
+                        # COULD REMOVE UNSQUEEZE IF REMOVE SQUEEZE FROM FUNCTION
+                        sic_mean = output[chart]['mean']  # Mean of SIC
+                        sic_variance = output[chart]['variance']  # Variance of SIC
+                        loss = loss_ce_functions[chart](sic_mean.to(device), batch_y[chart].to(device), sic_variance.to(device)) 
+                        mask = (batch_y[chart] != 255).type_as(sic_mean)
+                        masked_loss = loss * mask
+                        # Reduce the masked loss (e.g., mean over valid elements)
+                        final_loss = masked_loss.sum() / mask.sum()
+                        cross_entropy_loss += weight * final_loss
+                        #cross_entropy_loss += weight * loss_ce_functions[chart](
+                        #    sic_mean.unsqueeze(-1).to(device), batch_y[chart].to(device), sic_variance.unsqueeze(-1).to(device)) 
+                        #cross_entropy_loss += weight * loss_ce_functions[chart](
+                        #    output[chart][..., 0].unsqueeze(-1).to(device), batch_y[chart].to(device), output[chart][..., 1].unsqueeze(-1).to(device))      #added to device                   
                     else:
                         cross_entropy_loss += weight * loss_ce_functions[chart](
                             output[chart], batch_y[chart].to(device))
@@ -158,8 +165,16 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
 
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
                     if train_options['uncertainty'] != 0 and chart == 'SIC':
-                        val_cross_entropy_loss += weight * loss_ce_functions[chart](
-                            output[chart][..., 0].unsqueeze(-1).to(device), inf_y[chart].unsqueeze(0).long().to(device), output[chart][..., 1].unsqueeze(-1).to(device))                        
+                        sic_mean = output[chart]['mean']  # Mean of SIC
+                        sic_variance = output[chart]['variance']  # Variance of SIC
+                        loss = loss_ce_functions[chart](sic_mean.to(device), inf_y[chart].unsqueeze(0).long().to(device), sic_variance.to(device))
+                        mask = (inf_y[chart].unsqueeze(0).long() != 255).type_as(sic_mean)
+                        masked_loss = loss * mask
+                        # Reduce the masked loss (e.g., mean over valid elements)
+                        final_loss = masked_loss.sum() / mask.sum()
+                        val_cross_entropy_loss += weight * final_loss
+                        #val_cross_entropy_loss += weight * loss_ce_functions[chart](
+                        #    output[chart][..., 0].unsqueeze(-1).to(device), inf_y[chart].unsqueeze(0).long().to(device), output[chart][..., 1].unsqueeze(-1).to(device))                        
                     else:
                         val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
                                                                                 inf_y[chart].unsqueeze(0).long().to(device))
@@ -177,7 +192,10 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 if train_options['uncertainty'] != 0 and chart == 'SIC':
                     #print("UNIQUE BEFORE CLASS DECIDER")
                     #print(torch.unique(output[chart]))
-                    output[chart] = class_decider(output[chart][..., 0].unsqueeze(-1).to(device), train_options, chart)
+
+                    sic_mean = output[chart]['mean'].unsqueeze(-1)
+                    output[chart] = class_decider(sic_mean.to(device), train_options, chart)
+                    #output[chart] = class_decider(output[chart][..., 0].unsqueeze(-1).to(device), train_options, chart)
                     #print(output[chart].size())
                     #print("UNIQUE CLASS DECIDER VALS")
                     #print(torch.unique(output[chart]))

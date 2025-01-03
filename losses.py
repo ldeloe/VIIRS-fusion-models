@@ -219,6 +219,62 @@ class GaussianNLLLossWithIgnoreIndex2(nn.Module):
             print("Loss is still somehow NaN after mean")
 
         return loss
+class GaussianNLLLossTemp(nn.Module):
+    def __init__(self, ignore_index=255, reduction='mean', eps=1e-6, full=False):
+        super(GaussianNLLLossTemp, self).__init__()
+        self.ignore_index = ignore_index
+        self.reduction = reduction
+        self.eps = eps  # small value to avoid log(0)
+        self.full = full
+
+    def forward(self, input, target, var):
+        # Check var size
+        # If var.size == input.size, the case is heteroscedastic and no further checks are needed.
+        # Otherwise:
+        if var.size() != input.size():
+            # If var is one dimension short of input, but the sizes match otherwise, then this is a homoscedastic case.
+            # e.g. input.size = (10, 2, 3), var.size = (10, 2)
+            # -> unsqueeze var so that var.shape = (10, 2, 1)
+            # this is done so that broadcasting can happen in the loss calculation
+            if input.size()[:-1] == var.size():
+                var = torch.unsqueeze(var, -1)
+
+            # This checks if the sizes match up to the final dimension, and the final dimension of var is of size 1.
+            # This is also a homoscedastic case.
+            # e.g. input.size = (10, 2, 3), var.size = (10, 2, 1)
+            elif (
+                input.size()[:-1] == var.size()[:-1] and var.size(-1) == 1
+            ):  # Heteroscedastic case
+                pass
+
+            # If none of the above pass, then the size of var is incorrect.
+            else:
+                raise ValueError("var is of incorrect size")
+
+        # Check validity of reduction mode
+        if reduction != "none" and reduction != "mean" and reduction != "sum":
+            raise ValueError(reduction + " is not valid")
+
+        # Entries of var must be non-negative
+        if torch.any(var < 0):
+            raise ValueError("var has negative entry/entries")
+
+        # Clamp for stability
+        var = var.clone()
+        with torch.no_grad():
+            var.clamp_(min=eps)
+
+        # Calculate the loss
+        loss = 0.5 * (torch.log(var) + (input - target) ** 2 / var)
+        if full:
+            loss += 0.5 * math.log(2 * math.pi)
+
+        if reduction == "mean":
+            return loss.mean()
+        elif reduction == "sum":
+            return loss.sum()
+        else:
+            return loss
 
 class GaussianNLLLossWithIgnoreIndex(nn.Module):
     def __init__(self, ignore_index=255, reduction='mean', eps=1e-3): # originally 1e-6 but ray used 1e-3
@@ -231,8 +287,10 @@ class GaussianNLLLossWithIgnoreIndex(nn.Module):
 
         mask = (target != self.ignore_index).type_as(input)  # Binary mask for valid targets
         diff = input.squeeze(-1) - target
+        #diff = input - target
         diff = diff * mask
         max_var = torch.clamp(var.squeeze(-1), min=self.eps) # avoid log(0), divide by 0
+        #max_var = torch.clamp(var, min=self.eps) # avoid log(0), divide by 0
         masked_var = max_var * mask
         #print("Unique values in masked var: ", torch.unique(masked_var))
 
