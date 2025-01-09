@@ -50,10 +50,11 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'validate_viirs': 'datalists/test_dataset_viirs.json', 
 
                 'uncertainty': 1,
+                'max_norm': 1,
                  # p leave out cross val run
                  'cross_val_run': False,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
-                 'compute_classwise_f1score': False, # was true
+                 'compute_classwise_f1score': True, # was true
                  'plot_confusion_matrix': True,
                  'save_nc_file': True,
 
@@ -93,14 +94,15 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'model_selection': 'wnet-uncertainty', #'wnet', #'unet_regression', #'wnet',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'deconv_filters': [96, 128, 192, 192], # use if there's a mismatch with channels. corresponds with encoding [32,32,64,64]
-                 'epochs': 100,  # Number of epochs before training stop.
+                 'epochs': 300,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
-                 'task_weights': [1, 2, 2], #1,3,3 #1,4,4 test_weights
+                 'task_weights': [1, 3, 3], #was 1,2,2 until 300 test
                  'chart_loss': {  # Loss for the task
                      'SIC': {
                          'type': 'GaussianNLLLoss', 
                          'reduction': 'none',
+                         'eps': 1e-4,
                          #'type': 'GaussianNLLLossWithIgnoreIndex', 
                          #'ignore_index': 255,
                      },

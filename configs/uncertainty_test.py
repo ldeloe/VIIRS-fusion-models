@@ -55,7 +55,6 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
                  'compute_classwise_f1score': False, # was true
                  'plot_confusion_matrix': True,
-                 'save_nc_file': True,
 
                  'optimizer': {
                      'type': 'AdamW',
@@ -96,7 +95,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'epochs': 100,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
-                 'task_weights': [1, 2, 2], #1,3,3 #1,4,4 test_weights
+                 'task_weights': [1, 3, 3], #1,3,3 #1,4,4 test_weights
                  'chart_loss': {  # Loss for the task
                      'SIC': {
                          'type': 'GaussianNLLLoss', 

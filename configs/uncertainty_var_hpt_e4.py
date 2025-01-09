@@ -41,30 +41,26 @@ SCENE_VARIABLES = [
 train_options = {'train_variables': SCENE_VARIABLES,
                  'path_to_train_data': 'dataset',
                  'path_to_test_data': 'dataset',
-                 'train_list_path': 'datalists/train_dataset_cross_validation.json', #test_train.json', #
-                 #'val_path': 'datalists/validation_dataset.json', #
-                 #'test_path': 'datalists/test_dataset.json', #
-                 'val_path': 'datalists/test_dataset.json', #'datalists/validation_dataset.json', #
-                 'test_path': 'datalists/validation_dataset.json', #'datalists/test_dataset.json', #
+                 'train_list_path': 'datalists/train_dataset.json', 
+                 'val_path': 'datalists/test_dataset.json', 
+                 'test_path': 'datalists/validation_dataset.json', 
 
-                 'train_viirs': 'datalists/train_dataset_viirs_cross_validation.json',
-                 'test_viirs': 'datalists/validation_dataset_viirs.json', #'datalists/test_dataset_viirs.json', #test_viirs.json',#
-                 'validate_viirs': 'datalists/test_dataset_viirs.json', #'datalists/validation_dataset_viirs.json', #validate_viirs.json',#
-                 #'train_viirs': 'datalists/train_dataset_viirs.json', #
-                 #'test_viirs': 'datalists/test_dataset_viirs.json', #test_viirs.json',#
-                 #'validate_viirs': 'datalists/validation_dataset_viirs.json', #validate_viirs.json',#
+                 'train_viirs': 'datalists/train_dataset_viirs.json', 
+                 'test_viirs': 'datalists/validation_dataset_viirs.json', 
+                 'validate_viirs': 'datalists/test_dataset_viirs.json', 
 
-
+                'uncertainty': 1,
+                'max_norm': 1,
                  # p leave out cross val run
-                 'cross_val_run': True,
+                 'cross_val_run': False,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
-                 'p-fold': 60,
-                 'compute_classwise_f1score': True,
+                 'compute_classwise_f1score': False, # was true
                  'plot_confusion_matrix': True,
+                 'save_nc_file': True,
 
                  'optimizer': {
                      'type': 'AdamW',
-                     'lr': 0.0005,  # Optimizer learning rate.
+                     'lr': 0.0005,  # Optimizer learning rate. #tried 0.001 for lr
                      'b1': 0.9,
                      'b2': 0.999,
                      'weight_decay': 0.01
@@ -78,7 +74,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                      'lr_min': 0,  # Minimun learning rate
                  },
 
-                 'batch_size': 4, #16,
+                 'batch_size': 4, # 16 was tested for bs
                  'num_workers': 4,  # Number of parallel processes to fetch data.
                  'num_workers_val': 4,  # Number of parallel processes during validation.
                  'patch_size': 256,
@@ -95,17 +91,20 @@ train_options = {'train_variables': SCENE_VARIABLES,
                      'Cutmix_prob': 0.5,
                  },
                  # -- Model selection -- #
-                 'model_selection': 'wnet-separate-decoders', #'wnet', #'unet_regression', #'wnet',#'unet_feature_fusion', #'unet_regression',
+                 'model_selection': 'wnet-uncertainty', #'wnet', #'unet_regression', #'wnet',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'deconv_filters': [96, 128, 192, 192], # use if there's a mismatch with channels. corresponds with encoding [32,32,64,64]
                  'epochs': 300,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
-                 'task_weights': [1, 3, 3],
+                 'task_weights': [1, 3, 3], #was 1,2,2 until 300 test
                  'chart_loss': {  # Loss for the task
                      'SIC': {
-                         'type': 'MSELossWithIgnoreIndex',
-                         'ignore_index': 255,
+                         'type': 'GaussianNLLLoss', 
+                         'reduction': 'none',
+                         'eps': 1e-4, ### produced nan :(
+                         #'type': 'GaussianNLLLossWithIgnoreIndex', 
+                         #'ignore_index': 255,
                      },
                      'SOD': {
                          'type': 'CrossEntropyLoss',

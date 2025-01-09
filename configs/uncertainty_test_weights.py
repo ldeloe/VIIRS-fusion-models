@@ -92,7 +92,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'model_selection': 'wnet-uncertainty', #'wnet', #'unet_regression', #'wnet',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'deconv_filters': [96, 128, 192, 192], # use if there's a mismatch with channels. corresponds with encoding [32,32,64,64]
-                 'epochs': 300,  # Number of epochs before training stop.
+                 'epochs': 100,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
                  'task_weights': [1, 4, 4], #1,3,3 #1,4,4 test_weights

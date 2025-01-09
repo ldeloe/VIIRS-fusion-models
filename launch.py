@@ -16,6 +16,7 @@ from mmcv import Config, mkdir_or_exist
 from functions import compute_metrics, save_best_model, load_model, class_decider, \
 create_train_validation_and_test_scene_list, get_scheduler, get_optimizer, get_loss, get_model, accuracy_metric, classify_SIC_tensor
 
+from early_stopping import EarlyStopping
 # Note: may need in future
 #\ slide_inference, batched_slide_inference
 
@@ -54,6 +55,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     loss_ce_functions = {chart: get_loss(train_options['chart_loss'][chart]['type'], chart=chart, **train_options['chart_loss'][chart])
                          for chart in train_options['charts']}
 
+    early_stopping = EarlyStopping(patience=15) ## early stopping
     print('Training...')
     # -- Training Loop -- #
     for epoch in tqdm(iterable=range(start_epoch, train_options['epochs'])):
@@ -251,6 +253,9 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             model_path = save_best_model(cfg, train_options, net, optimizer, scheduler, epoch)
 
             wandb.save(model_path)
+
+        if early_stopping(val_loss_epoch): ## early stopping
+            break
 
     del inf_ys_flat, outputs_flat  # Free memory.
     return model_path

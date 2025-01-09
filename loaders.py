@@ -816,7 +816,7 @@ def get_variable_options(train_options: dict):
 
 
 def get_norm_month(file_name):
-    print("DEF get_norm_month")
+    #print("DEF get_norm_month")
     pattern = re.compile(r'\d{8}T\d{6}')
 
     # Search for the first match in the string

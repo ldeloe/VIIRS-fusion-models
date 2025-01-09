@@ -56,6 +56,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'p-fold': 0,
                  'compute_classwise_f1score': True,
                  'plot_confusion_matrix': True,
+                 'save_nc_file': True,
 
                  'optimizer': {
                      'type': 'AdamW',

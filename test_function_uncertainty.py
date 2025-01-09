@@ -119,8 +119,9 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             else:
                 output = net(inf_x)
                 if train_options['uncertainty'] != 0:
+                    sic_output_var = output['SIC']['variance'].unsqueeze(-1).to(device)  # Variance of SIC
                     output['SIC'] = output['SIC']['mean'].unsqueeze(-1).to(device)  # Mean of SIC
-                    #sic_output_var = output['SIC']['variance'].unsqueeze(-1).to(device)  # Variance of SIC
+                    
                     #sic_output_var = output['SIC'][..., 1].unsqueeze(-1).to(device) # may not be needed
                     #output['SIC'] = output['SIC'][..., 0].unsqueeze(-1).to(device) 
 
@@ -145,6 +146,16 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                         output[chart] = torch.nn.functional.interpolate(
                             output[chart], size=original_size, mode='nearest')
 
+                    if chart == 'SIC' and sic_output_var.size(3) == 1:
+                        print('PERMUTE SIC OUTPUT VARIANCE')
+                        sic_output_var = sic_output_var.permute(0, 3, 1, 2)
+                        sic_output_var = torch.nn.functional.interpolate(
+                            sic_output_var, size=original_size, mode='nearest')
+                        sic_output_var = sic_output_var.permute(0, 2, 3, 1)
+                    elif chart == 'SIC':
+                        print('DO NOT PERMUTE SIC OUTPUT VARIANCE')
+                        sic_output_var = torch.nn.functional.interpolate(
+                            sic_output_var, size=original_size, mode='nearest')
                     # upscale the output
                     # if not test:
                     inf_y[chart] = torch.nn.functional.interpolate(inf_y[chart].unsqueeze(dim=0).unsqueeze(dim=0),
@@ -163,7 +174,13 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], outputs_tfv_mask[chart]))
             inf_y_flat[chart] = inf_y[chart][~cfv_masks[chart]].to(device, non_blocking=True).float()
             inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y_flat[chart]))
-
+        
+        ## do I need?? ##
+        sic_output_var = sic_output_var.squeeze(0).squeeze(-1) # = torch.flatten(sic_output_var)
+        #sic_var_flat = sic_var_flat[~cfv_masks['SIC']]
+        #print("OUTPUT CLASS SHAPE: ", output_class['SIC'].size())
+        #print("SIC VAR SHAPE: ", sic_output_var.size())
+        #print("CFV MASKS SHAPE: ", cfv_masks['SIC'].size())
         ### NEW ###
         output_preds = classify_SIC_tensor(output_flat['SIC'])
         preds_SIC_class = torch.cat((preds_SIC_class, output_preds)) 
@@ -304,6 +321,20 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                     #format='png', dpi=128, bbox_inches="tight")
         plt.close('all')
 
+        ### SIC VARIANCE ###
+        sic_output_var = sic_output_var.cpu().numpy().astype(float)
+        sic_output_var[cfv_masks['SIC']] = np.nan
+
+        fig_var, ax = plt.subplots()
+        ax.set_xticks([])
+        ax.set_yticks([])
+        plt.imshow(sic_output_var)
+        plt.title(scene_name)
+        cbar = plt.colorbar()
+        cbar.set_label(label= "Variance [%$^2$]", fontsize=12)
+        fig_var.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Variance.png",
+            format='png', dpi=150, bbox_inches="tight")
+        plt.close('all')
 
         ### ADD NEW CLASSIFICATION FOR SIC METRIC ###
         fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=2, figsize=(10, 10)) # (5, 14)

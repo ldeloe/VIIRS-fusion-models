@@ -59,18 +59,18 @@ train_options = {'train_variables': SCENE_VARIABLES,
 
                  'optimizer': {
                      'type': 'AdamW',
-                     'lr': 0.0005,  # Optimizer learning rate. #tried 0.001 for lr
+                     'lr': 0.0001,  # Optimizer learning rate. #tried 0.001 for lr
                      'b1': 0.9,
-                     'b2': 0.999,
-                     'weight_decay': 0.01
+                     'b2': 0.98,
+                     'weight_decay': 0.02
                  },
 
                  'scheduler': {
                      'type': 'CosineAnnealingWarmRestartsLR',  # Name of the schedulers
-                     'EpochsPerRestart': 10,  # Number of epochs for the first restart
+                     'EpochsPerRestart': 20,  # Number of epochs for the first restart
                      # This number will be used to increase or descrase the number of epochs to restart after each restart.
                      'RestartMult': 2,
-                     'lr_min': 0,  # Minimun learning rate
+                     'lr_min': 1e-6,  # Minimun learning rate
                  },
 
                  'batch_size': 4, # 16 was tested for bs
@@ -93,10 +93,10 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'model_selection': 'wnet-uncertainty', #'wnet', #'unet_regression', #'wnet',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'deconv_filters': [96, 128, 192, 192], # use if there's a mismatch with channels. corresponds with encoding [32,32,64,64]
-                 'epochs': 100,  # Number of epochs before training stop.
+                 'epochs': 300,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
-                 'task_weights': [1, 2, 2], #1,3,3 #1,4,4 test_weights
+                 'task_weights': [1, 3, 3], #was 1,2,2 until 300 test
                  'chart_loss': {  # Loss for the task
                      'SIC': {
                          'type': 'GaussianNLLLoss', 

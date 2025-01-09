@@ -184,16 +184,16 @@ def r2_metric_rand(true, pred, num_classes):
         The calculated r2 score.
 
     """
-    print("R2 metric rand")
-    print("pred", len(pred))
-    print("true", len(true))
+    #print("R2 metric rand")
+    #print("pred", len(pred))
+    #print("true", len(true))
     if (not len(pred)==0) and not (len(true)==0):
         r2 = r2_score_random(preds=pred, target=true,num_classes=num_classes)
     else:
         r2 = torch.tensor(float("nan"))
 
-    print("R2 METRIC RAND")
-    print(r2)
+    #print("R2 METRIC RAND")
+    #print(r2)
 
     return r2
 
@@ -221,8 +221,8 @@ def r2_metric(true, pred, num_classes=None):
     """
     r2 = r2_score(preds=pred, target=true)
 
-    print("R2 METRIC pre change")
-    print(r2)
+    #print("R2 METRIC pre change")
+    #print(r2)
 
 
     #print("NANNNNNN change after debugging")
@@ -313,7 +313,6 @@ def save_best_model(cfg, train_options: dict, net, optimizer, scheduler, epoch: 
                     'epoch': epoch,
                     'train_options': train_options
                     },
-                #do I need to change these?????
                f=os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth'))
     print(f"model saved successfully at {os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth')}")
 
@@ -411,8 +410,8 @@ def compute_classwise_f1score(true, pred, charts, num_classes):
     """
     score = {}
     for chart in charts:
-        print(chart)
-        print(num_classes[chart])
+        #print(chart)
+        #print(num_classes[chart])
         score[chart] = f1_score(target=true[chart], preds=pred[chart], average='none',
                                 task='multiclass', num_classes=num_classes[chart])
     return score
