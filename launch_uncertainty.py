@@ -56,7 +56,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     loss_ce_functions = {chart: get_loss(train_options['chart_loss'][chart]['type'], chart=chart, **train_options['chart_loss'][chart])
                          for chart in train_options['charts']}
 
-    early_stopping = EarlyStopping(patience=15) ### EARLY STOPPING
+    #early_stopping = EarlyStopping(patience=15) ### EARLY STOPPING
     print('Training...')
     # -- Training Loop -- #
     for epoch in tqdm(iterable=range(start_epoch, train_options['epochs'])):
@@ -306,8 +306,8 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             wandb.save(model_path)
         
         #if early_stopping(val_loss_epoch, net):
-        if early_stopping(val_loss_epoch):
-            break
+        #if early_stopping(val_loss_epoch):
+        #    break
         ### IMPLEMENTATION OF EARLY STOPPING ###
 
     del inf_ys_flat, outputs_flat  # Free memory.
