@@ -170,6 +170,37 @@ class UNet_regression(UNet):
                 'SOD': self.sod_feature_map(x_expand),
                 'FLOE': self.floe_feature_map(x_expand)}
 
+class UNet_regression_var(UNet):
+
+    def __init__(self, options):
+        super().__init__(options)
+
+        print("UNet_regression_var")
+
+        self.regression_layer = torch.nn.Linear(options['unet_conv_filters'][0], 2)
+
+    def forward(self, x):
+        """Forward model pass."""
+        x_contract = [self.input_block(x)]
+        for contract_block in self.contract_blocks:
+            x_contract.append(contract_block(x_contract[-1]))
+
+        x_expand = self.bridge(x_contract[-1])
+        up_idx = len(x_contract)
+        for expand_block in self.expand_blocks:
+            x_expand = expand_block(x_expand, x_contract[up_idx - 1])
+            up_idx -= 1
+
+        # Predict mean and log-variance for SIC
+        sic_outputs = self.regression_layer(x_expand.permute(0, 2, 3, 1))
+        sic_mean = sic_outputs[..., 0]  # First output is mean
+        sic_log_variance = sic_outputs[..., 1]  # Second output is log-variance
+        sic_variance = torch.exp(sic_log_variance)  # Convert log-variance to variance
+
+        return {'SIC': {'mean': sic_mean, 'variance': sic_variance},
+                'SOD': self.sod_feature_map(x_expand),
+                'FLOE': self.floe_feature_map(x_expand)}
+
 ### VIIRS ###
 class UNet_regression_feature_fusion(UNet_feature_fusion):
     def __init__(self, options, input_channels):

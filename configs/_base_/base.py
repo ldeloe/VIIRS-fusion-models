@@ -159,6 +159,7 @@ train_options = {
     'down_sample_scale': 10,
     'task_weights': [1, 1, 1],
     
+    'uncertainty': 0,
     # p leave out cross val run
     'cross_val_run': False,
     'p-out': 5, #20,
@@ -179,7 +180,7 @@ train_options = {
     'chart_loss': {  # Loss for the task
         'SIC': {
             'type': 'CrossEntropyLoss',
-            'ignore_index': 255,
+            #'ignore_index': 255,
         },
         'SOD': {
             'type': 'CrossEntropyLoss',
@@ -341,7 +342,7 @@ train_options = {
 
     'chart_metric_individual_scenes': {  # Metric functions for each ice parameter and the associated weight.
         'SIC': {
-            'func': r2_metric_rand,
+            'func': r2_metric_rand, #r2_metric
             'weight': 2,
         },
         'SOD': {
