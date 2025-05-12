@@ -46,8 +46,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     artifact = wandb.Artifact(experiment_name+'_'+test_name, 'dataset')
     table = wandb.Table(columns=['ID', 'Image'])
 
-    # - Stores the output and the reference pixels to calculate the scores after inference on all the scenes.
-    #output_class = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
     # Stores the flat ouputs of only one scene.
     output_flat = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
     # Stores the flat outputs of all scene.
@@ -121,9 +119,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                 if train_options['uncertainty'] != 0:
                     sic_output_var = output['SIC']['variance'].unsqueeze(-1).to(device)  # Variance of SIC
                     output['SIC'] = output['SIC']['mean'].unsqueeze(-1).to(device)  # Mean of SIC
-                    
-                    #sic_output_var = output['SIC'][..., 1].unsqueeze(-1).to(device) # may not be needed
-                    #output['SIC'] = output['SIC'][..., 0].unsqueeze(-1).to(device) 
 
             inf_x = inf_x.to("cpu")
 
@@ -162,7 +157,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                             sic_output_var, size=original_size, mode='nearest')
                     
                     # upscale the output
-                    # if not test:
                     inf_y[chart] = torch.nn.functional.interpolate(inf_y[chart].unsqueeze(dim=0).unsqueeze(dim=0),
                                                                    size=original_size, mode='nearest').squeeze()
                     inf_y[chart] = inf_y[chart].to("cpu")  
@@ -187,18 +181,12 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             inf_y_flat[chart] = inf_y[chart][~cfv_masks[chart]].to("cpu").float()
             inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y_flat[chart]))
         
-        ## do I need?? ##
-        #sic_output_var = sic_output_var.squeeze(0).squeeze(-1) # = torch.flatten(sic_output_var)
-        #sic_var_flat = sic_var_flat[~cfv_masks['SIC']]
-        #print("OUTPUT CLASS SHAPE: ", output_class['SIC'].size())
-        #print("SIC VAR SHAPE: ", sic_output_var.size())
-        #print("CFV MASKS SHAPE: ", cfv_masks['SIC'].size())
-        ### NEW ###
+        ### SIC Accuracy ###
         output_preds = classify_SIC_tensor(output_flat['SIC'])
         preds_SIC_class = torch.cat((preds_SIC_class, output_preds)) 
         inf_y_flat_target = classify_SIC_tensor(inf_y_flat['SIC'])
         target_SIC_class = torch.cat((target_SIC_class, inf_y_flat_target))
-        ### NEW ###
+        ### SIC Accuracy ###
 
         for chart in train_options['charts']: 
             inf_y[chart] = inf_y[chart].cpu().numpy()
@@ -213,13 +201,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             if j == 2:
                 img = torch.squeeze(inf_x, dim=0).cpu().numpy()[4]
                 ax.imshow(img)
-
-                #ax.imshow(img, cmap='gnuplot2_r')
-                #arranged = np.arange(0, len(np.unique(img)))
-                #cmap = plt.get_cmap('gnuplot2_r', len(np.unique(img))-1)
-                #norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
-                #arranged = arranged[:-1]
-                #cbar = plt.colorbar(mappable = mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax) #, ticks = arranged, fraction=0.0485, pad=0.049, ax=ax)
             else:
                 img = torch.squeeze(inf_x, dim=0).cpu().numpy()[j]
                 ax.imshow(img, cmap='gray')
@@ -245,8 +226,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                       [chart] - 2, cmap='jet', interpolation='nearest')
             ax.set_xticks([])
             ax.set_yticks([])
-            # removed for poster format:
-            #ax.set_title([f'Scene {scene_name}, {chart}: Model Prediction'])
             chart_cbar(ax=ax, n_classes=train_options['n_classes'][chart], chart=chart, cmap='jet')
 
         for idx, chart in enumerate(train_options['charts']):
@@ -258,13 +237,8 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                       [chart] - 2, cmap='jet', interpolation='nearest')
             ax.set_xticks([])
             ax.set_yticks([])
-            # removed for poster format:
-            #ax.set_title([f'Scene {scene_name}, {chart}: Ground Truth'])
             chart_cbar(ax=ax, n_classes=train_options['n_classes'][chart], chart=chart, cmap='jet')
 
-        # plt.suptitle(f"Scene: {scene_name}", y=0.65)
-        # plt.suptitle(f"Scene: {scene_name}", y=0)
-        # plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.5, hspace=-0)
         plt.subplots_adjust(left=0, bottom=0, right=1, top=0.75, wspace=0.5, hspace=-0)
         fig.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}.png",
                     format='png', dpi=300, bbox_inches="tight")
@@ -279,34 +253,21 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         for j in range(0, 2):
             ax_SIC = axs_SIC[j]
             img_SIC = torch.squeeze(inf_x, dim=0).cpu().numpy()[j]
-            #if j == 0:
-            #    ax_SIC.set_title(f'Scene {scene_name}, HH')
-            #else:
-            #    ax.set_title(f'Scene {scene_name}, HV')
             ax_SIC.set_xticks([])
             ax_SIC.set_yticks([])
             ax_SIC.imshow(img_SIC, cmap='gray')
 
-        #ax = axs[2]
-        #ax.set_title('Water Edge SIC: Red, SOD: Green,Floe: Blue')
-        #edge_water_output = water_edge_plot_overlay(output_class, tfv_mask.cpu().numpy(), train_options)
-
-        #ax.imshow(edge_water_output, vmin=0, vmax=1, interpolation='nearest')
-        ##where I stopped
         for idx, chart in enumerate(train_options['charts']):
 
             ax_SIC = axs_SIC[idx+2]
             output_class[chart] = output_class[chart].astype(float)
-            # if test is False:
+
             output_class[chart][cfv_masks[chart]] = np.nan
-            # else:
-            #     output[chart][masks.cpu().numpy()] = np.nan
+
             ax_SIC.imshow(output_class[chart], vmin=0, vmax=train_options['n_classes']
                       [chart] - 2, cmap='jet', interpolation='nearest')
             ax_SIC.set_xticks([])
             ax_SIC.set_yticks([])
-            # removed for poster format:
-            #ax.set_title([f'Scene {scene_name}, {chart}: Model Prediction'])
             chart_cbar(ax=ax_SIC, n_classes=train_options['n_classes'][chart], chart=chart, cmap='jet')
             break
 
@@ -319,14 +280,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                       [chart] - 2, cmap='jet', interpolation='nearest')
             ax_SIC.set_xticks([])
             ax_SIC.set_yticks([])
-            # removed for poster format:
-            #ax.set_title([f'Scene {scene_name}, {chart}: Ground Truth'])
+
             chart_cbar(ax=ax_SIC, n_classes=train_options['n_classes'][chart], chart=chart, cmap='jet')
             break
 
-        # plt.suptitle(f"Scene: {scene_name}", y=0.65)
-        # plt.suptitle(f"Scene: {scene_name}", y=0)
-        # plt.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0.5, hspace=-0)
         plt.subplots_adjust(left=0, bottom=0, right=1, top=0.75, wspace=0.5, hspace=-0)
         fig_SIC.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Plot.png",
                     format='png', dpi=300, bbox_inches="tight")
@@ -334,7 +291,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         plt.close('all')
 
         ### SIC VARIANCE ###
-        #sic_output_var = sic_output_var.cpu().numpy().astype(float)
         sic_output_var[cfv_masks['SIC']] = np.nan
 
         fig_var, ax = plt.subplots()
@@ -355,15 +311,13 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         n_classes = 4
         ax_SIC = axs_SIC_classes[0]
         converted_SIC = classify_from_SIC(output_class['SIC'])
-        #print('cfv_masks[SIC]: ', cfv_masks['SIC'])
-        #output_class['SIC'] = output_class['SIC'].astype(float)
         converted_SIC = converted_SIC.astype(float)
         converted_SIC[cfv_masks['SIC']] = np.nan
 
         ax_SIC.imshow(converted_SIC, vmin=0, vmax=n_classes - 2, cmap='jet', interpolation='nearest')
         ax_SIC.set_xticks([])
         ax_SIC.set_yticks([])
-        ax_SIC.set_title('Model Prediction') # removed square brackets
+        ax_SIC.set_title('Model Prediction') 
         cbar_ice_classification(ax=ax_SIC, n_classes=n_classes, cmap='jet')
         ## ICE CHART ##
         ax_SIC = axs_SIC_classes[2]
@@ -405,37 +359,26 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         table.add_data(scene_name, wandb.Image(f"{osp.join(cfg.work_dir,inference_name,scene_name)}.png"))
 
         # Saving results per scene
-
         
         # Get the scores per scene
-        #print("ACTUAL METRIC (R2 RAND)")
         scene_combined_score, scene_scores = compute_metrics(true=inf_y_flat, pred=output_flat,
                                                              charts=train_options['charts'],
                                                              metrics=train_options['chart_metric_individual_scenes'],
                                                              num_classes=train_options['n_classes'])
-        ### NEW ###
+
         scene_accuracy = accuracy_metric(output_preds, inf_y_flat_target)
-        ### NEW ###        
-        ##TEST USING R2 METRIC ###
-        #print("TEST METRIC (R2)")
-        #scene_combined_score_TEST, scene_scores_TEST = compute_metrics(true=inf_y_flat, pred=output_flat,
-        #                                                     charts=train_options['charts'],
-        #                                                     metrics=train_options['chart_metric'],
-        #                                                     num_classes=train_options['n_classes'])        
-        #scene_water_edge_accuarcy = water_edge_metric(output_tfv_mask, train_options)
+
         
         # Create table with results and log it into wandb b. 
         # Add all the scores into a list and append it to results per scene. 
         # This list with be the data for the table
         scene_results = [x.item() for x in scene_scores.values()]
-        #print("INDIVIDUAL SCENE SCORES")
-        #print(scene_results)
+
         scene_results.insert(0, scene_combined_score.item())
         scene_results.insert(0, scene_name)
-        #scene_results.append(scene_water_edge_accuarcy.item())
-        ### NEW ###
+
         scene_results.append(scene_accuracy)
-        ### NEW ###
+      
         results_per_scene.append(scene_results)
 
         # Saving scene results on summary if  mode == 'test'
@@ -447,16 +390,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             for chart in train_options['charts']:
                 wandb.run.summary[f"{'Test '+scene_name}/{chart} {train_options['chart_metric_individual_scenes'][chart]['func'].__name__}"] = scene_scores[chart]
             
-            ### NEW ###
             wandb.run.summary[f"{'Test '+scene_name}/SIC Accuracy"] = scene_accuracy
-            ### NEW ###
-            #wandb.run.summary[f"{'Test '+scene_name}/Water Consistency Accuarcy"] = scene_water_edge_accuarcy
 
     print('inference done')
     # Create wandb table to store results
-    #scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE', 'Water Consistency Acccuracy'],
-
-    #scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE'],
     scenes_results_table = wandb.Table(columns=['Scene', 'Combine Score', 'SIC', 'SOD', 'FLOE', "SIC Accuracy"],
                                        data=results_per_scene)
     # Log table into wandb
@@ -485,18 +422,15 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
         title = osp.join(cfg.work_dir,inference_name,inference_name)
         generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_axis_label[idx], bar_widths[idx], title)
+    
     ### BAR CHART ###
-
-    #scene_results2 = [x.item() for x in scores.values()]
-    #print("FULL DATASET SCENE SCORES")
-    #print(scene_results2)    
     # Release 
+
     del inf_x, output
     torch.cuda.empty_cache()
 
     print('done calculating overall results. ')
-    # compute water edge metric
-    #water_edge_accuarcy = water_edge_metric(outputs_tfv_mask, train_options)
+
     if train_options['compute_classwise_f1score']:
         from functions import compute_classwise_f1score
         classwise_scores = compute_classwise_f1score(true=inf_ys_flat, pred=outputs_flat,
@@ -534,7 +468,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             plt.ylabel('Actual Labels')
             plt.title(chart+" Confusion Matrix "+test_name)
             cbar = ax.collections[0].colorbar
-            # cbar.set_ticks([0, .2, .75, 1])
             cbar.set_ticklabels(['0%', '20%', '40%', '60%', '80%', '100%'])
             mkdir_or_exist(f"{osp.join(cfg.work_dir)}/{test_name}")
             plt.savefig(f"{osp.join(cfg.work_dir)}/{test_name}/{chart}_confusion_matrix.png",
@@ -575,13 +508,9 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             wandb.run.summary[f"{test_name}/{chart}: classwise score:"] = classwise_scores[chart]
             print(
                 f"{test_name}/{chart}: classwise score: = {classwise_scores[chart]}")
-    ### NEW ###
+    
     wandb.run.summary[f"{test_name}/SIC Accuracy"] = accuracy
     print(f"SIC Accuracy: {accuracy:.3f}%")
-    ### NEW ###
-    #wandb.run.summary[f"{test_name}/Water Consistency Accuarcy"] = water_edge_accuarcy
-    #print(
-    #    f"{test_name}/Water Consistency Accuarcy = {water_edge_accuarcy}")
 
     if mode == 'test':
         artifact.add(table, experiment_name+'_test')
@@ -596,7 +525,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         compression = dict(zlib=True, complevel=1)
         encoding = {var: compression for var in upload_package.data_vars}
         upload_package.to_netcdf(osp.join(cfg.work_dir, f'{experiment_name}_{test_name}_upload_package.nc'),
-                                 # f'{osp.splitext(osp.basename(cfg))[0]}
                                  mode='w', format='netcdf4', engine='h5netcdf', encoding=encoding)
         print('Testing completed.')
         print("File saved succesfully at", osp.join(cfg.work_dir, f'{experiment_name}_upload_package.nc'))
