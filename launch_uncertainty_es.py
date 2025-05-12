@@ -13,17 +13,18 @@ from tqdm import tqdm  # Progress bar
 import wandb
 from mmcv import Config, mkdir_or_exist
 
-from functions import compute_metrics, save_best_model, load_model, class_decider, pad_and_infer, \
+from functions import compute_metrics, save_best_model, load_model, class_decider, \
 create_train_validation_and_test_scene_list, get_scheduler, get_optimizer, get_loss, get_model, accuracy_metric, classify_SIC_tensor
 
 from early_stopping import EarlyStopping
+
 # Note: may need in future
 #\ slide_inference, batched_slide_inference
 
 from loaders import get_variable_options, TrainValDataset, TestDataset
 
 from utils import colour_str
-from test_function import test
+from test_function_uncertainty import test
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Default U-NET segmentor')
@@ -55,7 +56,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     loss_ce_functions = {chart: get_loss(train_options['chart_loss'][chart]['type'], chart=chart, **train_options['chart_loss'][chart])
                          for chart in train_options['charts']}
 
-    #early_stopping = EarlyStopping(patience=15) ## early stopping
+    early_stopping = EarlyStopping(patience=15) ### EARLY STOPPING
     print('Training...')
     # -- Training Loop -- #
     for epoch in tqdm(iterable=range(start_epoch, train_options['epochs'])):
@@ -86,13 +87,27 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 output = net(batch_x)
                 # - Calculate loss.
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-                    #if train_options['uncertainty'] != 0 and chart == 'SIC':
-                    #    var = torch.var(output[chart],keepdim=True)
-                    #else:
-                    #    cross_entropy_loss += weight * loss_ce_functions[chart](
-                    #        output[chart], batch_y[chart].to(device))
-                    cross_entropy_loss += weight * loss_ce_functions[chart](
-                        output[chart], batch_y[chart].to(device))
+                    if train_options['uncertainty'] != 0 and chart == 'SIC':
+
+                        # COULD REMOVE UNSQUEEZE IF REMOVE SQUEEZE FROM FUNCTION
+                        sic_mean = output[chart]['mean']  # Mean of SIC
+                        sic_variance = output[chart]['variance']  # Variance of SIC
+                        loss = loss_ce_functions[chart](sic_mean.to(device), batch_y[chart].to(device), sic_variance.to(device)) 
+                        mask = (batch_y[chart] != 255).type_as(sic_mean)
+                        masked_loss = loss * mask
+                        # Reduce the masked loss (e.g., mean over valid elements)
+                        final_loss = masked_loss.sum() / mask.sum() #masked_loss.nansum() / mask.nansum() # was just .sum()
+                        #if np.isnan(final_loss):
+                        #    final_loss = 0.0
+                        cross_entropy_loss += weight * final_loss
+                        #cross_entropy_loss += weight * loss_ce_functions[chart](
+                        #    sic_mean.unsqueeze(-1).to(device), batch_y[chart].to(device), sic_variance.unsqueeze(-1).to(device)) 
+                        #cross_entropy_loss += weight * loss_ce_functions[chart](
+                        #    output[chart][..., 0].unsqueeze(-1).to(device), batch_y[chart].to(device), output[chart][..., 1].unsqueeze(-1).to(device))      #added to device                   
+                    else:
+                        cross_entropy_loss += weight * loss_ce_functions[chart](
+                            output[chart], batch_y[chart].to(device))
+
             # Note: removed water edge loss; this conditional is a renment and could be removed in future
             #if train_options['edge_consistency_loss'] != 0:
             #    a = train_options['edge_consistency_loss']
@@ -100,11 +115,16 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             #else:
             #    train_loss_batch = cross_entropy_loss
             train_loss_batch = cross_entropy_loss
+
+            ###if not torch.isnan(train_loss_batch): #freezes learning rate
             # - Reset gradients from previous pass.
             optimizer.zero_grad()
 
             # - Backward pass.
             train_loss_batch.backward()
+
+            # - Prevent exploding gradient with GaussianNLLLoss
+            torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=train_options['max_norm']) #max_norm=1.0) 
 
             # - Optimizer step
             optimizer.step()
@@ -150,14 +170,23 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 inf_x = inf_x.to(device, non_blocking=True)
                 if train_options['model_selection'] == 'swin':
                     output = slide_inference(inf_x, net, train_options, 'val')
-                elif train_options['model_selection'] == 'vit':
-                    output = pad_and_infer(model=net, image=inf_x, train_size=train_options['patch_size'])
                 else:
                     output = net(inf_x)
 
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-
-                    val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
+                    if train_options['uncertainty'] != 0 and chart == 'SIC':
+                        sic_mean = output[chart]['mean']  # Mean of SIC
+                        sic_variance = output[chart]['variance']  # Variance of SIC
+                        loss = loss_ce_functions[chart](sic_mean.to(device), inf_y[chart].unsqueeze(0).long().to(device), sic_variance.to(device))
+                        mask = (inf_y[chart].unsqueeze(0).long() != 255).type_as(sic_mean)
+                        masked_loss = loss * mask
+                        # Reduce the masked loss (e.g., mean over valid elements)
+                        final_loss = masked_loss.sum() / mask.sum()
+                        val_cross_entropy_loss += weight * final_loss
+                        #val_cross_entropy_loss += weight * loss_ce_functions[chart](
+                        #    output[chart][..., 0].unsqueeze(-1).to(device), inf_y[chart].unsqueeze(0).long().to(device), output[chart][..., 1].unsqueeze(-1).to(device))                        
+                    else:
+                        val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
                                                                                 inf_y[chart].unsqueeze(0).long().to(device))
 
                 # Note: again, a remnent from removing the water loss
@@ -169,17 +198,33 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             # - Final output layer, and storing of non masked pixels.
             for chart in train_options['charts']:
                 #print("CHART: ", chart)
-                if chart == 'SIC':
-                    print("SIC before class decider: ", torch.unique(output['SIC']))
-                output[chart] = class_decider(output[chart], train_options, chart)
-                if chart == 'SIC':
-                    print("SIC after class decider: ", torch.unique(output['SIC']))
+                #output[chart] = class_decider(output[chart], train_options, chart)
+                if train_options['uncertainty'] != 0 and chart == 'SIC':
+                    #print("UNIQUE BEFORE CLASS DECIDER")
+                    #print(torch.unique(output[chart]))
+
+                    sic_mean = output[chart]['mean'].unsqueeze(-1)
+                    output[chart] = class_decider(sic_mean.to(device), train_options, chart)
+                    #output[chart] = class_decider(output[chart][..., 0].unsqueeze(-1).to(device), train_options, chart)
+                    #print(output[chart].size())
+                    #print("UNIQUE CLASS DECIDER VALS")
+                    #print(torch.unique(output[chart]))
+                else:
+                    #print("UNIQUE OUTPUT")
+                    #print(torch.unique(output[chart]))
+                    output[chart] = class_decider(output[chart], train_options, chart)
+                    #print(output[chart].size())
+
                 outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart][~cfv_masks[chart]]))
+                #print(outputs_flat[chart].size())
 
                 outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], output[chart][~tfv_mask]))
                 inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y[chart]
                                                 [~cfv_masks[chart]].to(device, non_blocking=True)))
-
+                #print(inf_ys_flat[chart].size())
+            
+            #print(outputs_flat.size())
+            #print(inf_ys_flat.size())
             ### NEW ###
             #output_preds = classify_SIC_tensor(output['SIC'][~cfv_masks['SIC']])
             preds_SIC_class = classify_SIC_tensor(outputs_flat['SIC']) #torch.cat((preds_SIC_class, output_preds))#[~cfv_masks['SIC']])) 
@@ -207,8 +252,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
         if train_options['compute_classwise_f1score']:
             from functions import compute_classwise_f1score
             # dictionary key = chart, value = tensor; e.g  key = SOD, value = tensor([0, 0.2, 0.4, 0.2, 0.1])
-            classwise_scores = compute_classwise_f1score(true=inf_ys_flat, pred=outputs_flat,
-                                                         charts=train_options['charts'], num_classes=train_options['n_classes'])
+            classwise_scores = compute_classwise_f1score(true=inf_ys_flat, pred=outputs_flat, charts=train_options['charts'], num_classes=train_options['n_classes'])
         print("")
         print(f"Epoch {epoch} score:")
 
@@ -246,6 +290,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
 
         # If the scores is better than the previous epoch, then save the model and rename the image to best_validation.
 
+        ### IMPLEMENTATION OF EARLY STOPPING ###
         if combined_score > best_combined_score:
             best_combined_score = combined_score
 
@@ -259,9 +304,11 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             model_path = save_best_model(cfg, train_options, net, optimizer, scheduler, epoch)
 
             wandb.save(model_path)
-
-        #if early_stopping(val_loss_epoch): ## early stopping
-        #    break
+        
+        #if early_stopping(val_loss_epoch, net):
+        if early_stopping(val_loss_epoch):
+            break
+        ### IMPLEMENTATION OF EARLY STOPPING ###
 
     del inf_ys_flat, outputs_flat  # Free memory.
     return model_path
@@ -285,6 +332,7 @@ def create_dataloaders(train_options):
     return dataloader_train, dataloader_val
 
 def main():
+    print("Entered main")
     args = parse_args()
     ic(args.config)
     cfg = Config.fromfile(args.config)
@@ -434,7 +482,6 @@ def main():
     print('-----------------------------------')
 
     # this is for valset 1 visualization along with gt
-    ####device = torch.device('cpu')
     test('val', net, checkpoint_path, device, cfg.deepcopy(), train_options['validate_list'], train_options['validate_list_viirs'], 'CrossValidation')
 
 

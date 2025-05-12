@@ -1,22 +1,55 @@
 # -- Built-in modules -- #
 import os
+
+import os.path as osp
+
 import json
+import xarray as xr
 # -- Third-party modules -- #
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.utils.data as data
-from torchmetrics.functional import r2_score, f1_score
+from torchmetrics.functional import r2_score, f1_score, accuracy
 from tqdm import tqdm  # Progress bar
+import torch.nn.functional as F
+import math
 # -- Proprietary modules -- #
 
 from utils import ICE_STRINGS, GROUP_NAMES
-from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_feature_fusion
+from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_feature_fusion, UNet_regression_var
 from wnet import WNet
 from wnet_separate_decoders import WNet_Separate_Decoders
-
+from wnet_separate_viirs_decoders import WNet_Separate_VIIRS_Decoders
+from wnet_separate_viirs import WNet_Separate_VIIRS
+from wnet_uncertainty import WNet_Uncertainty
+from unet_uncertainty import UNet_regression_uncertainty
+from wnet_separate_viirs_uncertainty import WNet_Separate_VIIRS_Uncertainty
+from wnet_separate_decoders_uncertainty import WNet_Separate_Decoders_Uncertainty
 from r2_replacement import r2_score_random 
+
+from ViT import SegmentationViT
+
+def generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_label, bar_width, title):
+  labels = [GROUP_NAMES[chart][i] for i in range(len(pixels_per_class))]
+  percent_class = [float((class_n/n_pixels)*100) for class_n in pixels_per_class]
+
+  plt.figure(figsize=(6, 5))
+  bars = plt.bar(labels, percent_class,width=bar_width)
+
+  for bar, class_n in zip(bars, percent_class):
+    plt.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+             f"{class_n:.2f}%", ha='center', va='bottom', fontsize=10)
+    
+  plt.xlabel(x_label)
+  plt.ylabel("Pixel Count Percentage [%]")
+  #plt.xticks(list(LABELS.values()), labels=list(LABELS.values()), rotation=45, ha='right')
+  plt.xticks(list(GROUP_NAMES[chart].values()), rotation=45, ha='right')
+  plt.tight_layout()
+  plt.savefig(f"{title}-{chart}-BAR-CHART.png", dpi=150)
+  plt.close('all')
+  #plt.show()  
 
 def chart_cbar(ax, n_classes, chart, cmap='vridis'):
 
@@ -36,8 +69,66 @@ def chart_cbar(ax, n_classes, chart, cmap='vridis'):
     norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
     arranged = arranged[:-1]  # Discount the mask class.
     cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=arranged, fraction=0.0485, pad=0.049, ax=ax)
-    cbar.set_label(label=ICE_STRINGS[chart])
+    cbar.ax.tick_params(labelsize=12)
+    cbar.set_label(label=ICE_STRINGS[chart], fontsize=12)
     cbar.set_ticklabels(list(GROUP_NAMES[chart].values()))
+
+def cbar_ice_classification(ax, n_classes, cmap='vridis'):
+
+    """
+    Create discrete colourbar for plot with the sea ice parameter class names.
+
+    Parameters
+    ----------
+    n_classes: int
+        Number of classes for the chart parameter.
+    chart: str
+        The relevant chart.
+    """
+    LABELS = {0: 'Water', 1: 'Marginal\n Ice', 2: 'Consolidated\n Ice'}
+    CLABEL = 'Ice Classification'
+    arranged = np.arange(0, n_classes)
+    cmap = plt.get_cmap(cmap, n_classes - 1)
+    # Get colour boundaries. -0.5 to center ticks for each color.
+    norm = mpl.colors.BoundaryNorm(arranged - 0.5, cmap.N)
+    arranged = arranged[:-1]  # Discount the mask class.
+    cbar = plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), ticks=arranged, fraction=0.0485, pad=0.049, ax=ax)
+    cbar.ax.tick_params(labelsize=12)
+    cbar.set_label(label= CLABEL, fontsize=12)
+    cbar.set_ticklabels(list(LABELS.values()))
+
+def classify_from_SIC(SIC):
+    #SIC_classes = torch.zeros_like(SIC_tensor, dtype=torch.int32)
+    SIC_classes = np.zeros_like(SIC, dtype=int)
+    SIC_classes[(SIC >= 2) & (SIC <= 8)] = 1  # marginal ice
+    SIC_classes[(SIC > 8) & (SIC <= 100)] = 2  # consolidated ice
+    SIC_classes[SIC == 255] = 255
+    return SIC_classes
+
+def classify_SIC_list(data):
+  #class_data = torch.zeros_like(data, dtype=torch.int32)
+  class_data = np.zeros_like(SIC, dtype=int)
+
+  class_data[(data >= 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
+  class_data[(data > 8) & (data <= 100)] = 2   # 8 < x <= 100 -> 2
+  class_data[data == 255] = 255
+
+  return class_data
+
+def classify_SIC_tensor(data):
+  class_data = torch.zeros_like(data, dtype=torch.int32)
+
+  class_data[(data >= 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
+  class_data[(data > 8) & (data <= 100)] = 2   # 8 < x <= 100 -> 2
+  class_data[data == 255] = 255
+
+  return class_data
+
+def accuracy_metric(preds,target):
+  acc = accuracy(preds,target, task="multiclass", num_classes=3)
+  acc = float(acc)*100
+
+  return acc
 
 def compute_metrics(true, pred, charts, metrics, num_classes):
 
@@ -110,10 +201,16 @@ def r2_metric_rand(true, pred, num_classes):
         The calculated r2 score.
 
     """
+    #print("R2 metric rand")
+    #print("pred", len(pred))
+    #print("true", len(true))
     if (not len(pred)==0) and not (len(true)==0):
         r2 = r2_score_random(preds=pred, target=true,num_classes=num_classes)
     else:
         r2 = torch.tensor(float("nan"))
+
+    #print("R2 METRIC RAND")
+    #print(r2)
 
     return r2
 
@@ -140,6 +237,13 @@ def r2_metric(true, pred, num_classes=None):
 
     """
     r2 = r2_score(preds=pred, target=true)
+
+    #print("R2 METRIC pre change")
+    #print(r2)
+
+
+    #print("NANNNNNN change after debugging")
+    #return torch.tensor(float(0))
 
     return r2
 
@@ -226,7 +330,6 @@ def save_best_model(cfg, train_options: dict, net, optimizer, scheduler, epoch: 
                     'epoch': epoch,
                     'train_options': train_options
                     },
-                #do I need to change these?????
                f=os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth'))
     print(f"model saved successfully at {os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth')}")
 
@@ -324,6 +427,10 @@ def compute_classwise_f1score(true, pred, charts, num_classes):
     """
     score = {}
     for chart in charts:
+        print('True: ', true[chart].shape, torch.unique(true[chart]))
+        print('Pred: ', pred[chart].shape, torch.unique(pred[chart]))
+
+        #print(num_classes[chart])
         score[chart] = f1_score(target=true[chart], preds=pred[chart], average='none',
                                 task='multiclass', num_classes=num_classes[chart])
     return score
@@ -348,6 +455,38 @@ def create_train_validation_and_test_scene_list(train_options):
         train_options['train_list_viirs'] = json.loads(file.read())
     ### VIIRS ###
 
+    ##############################################################
+    generate_train_bar_graph = False # only set to true if the train/val dataset changes  # add to config in future?
+
+    if generate_train_bar_graph:
+        with open(train_options['path_to_env'] + 'datalists/train_dataset_cross_validation.json') as file:
+            bar_data = json.loads(file.read())
+        bar_data = [file[17:32] + '_' + file[77:80] + '_prep.nc' for file in bar_data]
+        
+        print("TRAIN BAR CHARTS")
+        x_axis_label = ["Sea Ice Concentration [%]", "Stage of Development", "Floe Size"]
+        bar_widths = [5, 0.8, 0.8]
+
+        n_pixels = np.zeros((3,1))
+        pixels_per_class = np.zeros((3,train_options['n_classes']['SIC']-1))
+
+        for data_file in bar_data:
+            print(data_file)
+            scene = xr.open_dataset('./dataset/' + data_file, engine='h5netcdf')            
+
+            for idx, chart in enumerate(train_options['charts']):
+                chart_data = scene.variables[chart].values
+
+                for i in range(0, train_options['n_classes'][chart] - 1):
+                    n_class = np.count_nonzero(chart_data == i) 
+                    pixels_per_class[idx][i] += n_class
+                    n_pixels[idx] += n_class
+
+        title = './work_dir/opt_test_bar_charts/train_bar_charts' # note that this needs to change in future
+        for idx, chart in enumerate(train_options['charts']):
+            generate_pixels_per_class_bar_graph(chart, pixels_per_class[idx][0:train_options['n_classes'][chart] - 1], n_pixels[idx], x_axis_label[idx], bar_widths[idx], title)
+    ##############################################################
+
     # Validation ---------
     if train_options['cross_val_run']:
 
@@ -357,10 +496,8 @@ def create_train_validation_and_test_scene_list(train_options):
         '''
 
         ### Select a random number of validation scenes with the same seed ###
-        #train_options['validate_list'] = np.random.choice(np.array(
-        #    train_options['train_list']), size=train_options['p-out'], replace=False)
-        #train_options['validate_list_viirs'] = np.random.choice(np.array(
-        #    train_options['train_viirs']), size=train_options['p-out'], replace=False)
+        #train_options['validate_list'] = np.random.choice(np.array(train_options['train_list']), size=train_options['p-out'], replace=False)
+        #train_options['validate_list_viirs'] = np.random.choice(np.array(train_options['train_viirs']), size=train_options['p-out'], replace=False)
         ### Select a random number of validation scenes with the same seed ###
 
         ### Randomly generated validation set ###
@@ -372,9 +509,15 @@ def create_train_validation_and_test_scene_list(train_options):
         ### Randomly generated validation set ###
 
         ### Set validation set ###
-        train_options['validate_list'] = np.array(train_options['train_list'])[10:15]
-            ### VIIRS ###
-        train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[10:15]
+        if train_options['p-fold'] == 48:
+            print('last file in fold 48 causes an error')
+            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+11] #+11] for 48
+                ### VIIRS ###
+            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+11] #+11] for 48
+        else:
+            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+12] #+11] for 48
+                ### VIIRS ###
+            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+12] #+11] for 48
             ### VIIRS ###
         ### Set validation set ###
         
@@ -420,6 +563,60 @@ def create_train_validation_and_test_scene_list(train_options):
     print('validate')
     print(train_options['validate_list'])
     print(train_options['validate_list_viirs'])
+
+def pad_and_infer(model, image, train_size=256):
+    N, C, H, W = image.shape
+    
+    # Calculate padding to make dimensions divisible by train_size (256)
+    pad_h = (train_size - H % train_size) % train_size
+    pad_w = (train_size - W % train_size) % train_size
+    
+    # Pad the image
+    padded_image = F.pad(image, (0, pad_w, 0, pad_h), mode='reflect')
+    
+    # Calculate the number of 256x256 patches
+    num_patches_h = math.ceil((H + pad_h) / train_size)
+    num_patches_w = math.ceil((W + pad_w) / train_size)
+    
+    # Perform inference
+    with torch.no_grad():
+        # Process the image in 256x256 patches
+        output_list = []
+        for i in range(num_patches_h):
+            for j in range(num_patches_w):
+                patch = padded_image[:, :, i*train_size:(i+1)*train_size, j*train_size:(j+1)*train_size]
+                patch_output = model(patch)
+                output_list.append(patch_output)
+        
+        # Stitch the patches back together
+        output = {}
+        for task in output_list[0].keys():
+            task_outputs = [patch[task] for patch in output_list]
+            
+            #if task == 'SIC':  # Special handling for taskA with shape [N, H, W, 1]
+            #    stitched_task = torch.cat([torch.cat(task_outputs[i*num_patches_w:(i+1)*num_patches_w], dim=2) for i in range(num_patches_h)], dim=1)
+            #    if torch.any(torch.isnan(stitched_task)) or torch.any(torch.isinf(stitched_task)):
+            #        raise ValueError("stitched_task contains NaN or Inf values.")
+            #else:  # For taskB and taskC with shape [N, C, H, W]
+            stitched_task = torch.cat([torch.cat(task_outputs[i*num_patches_w:(i+1)*num_patches_w], dim=3) for i in range(num_patches_h)], dim=2)
+            
+            output[task] = stitched_task
+    
+    # Unpad the outputs
+    unpadded_output = {}
+    for task, pred in output.items():
+        #if task == 'SIC':  # Unpad taskA with shape [N, H, W, 1]
+        #    unpadded_output[task] = pred[:, :H, :W, :]
+        #    if torch.any(torch.isnan(unpadded_output['SIC'])) or torch.any(torch.isinf(unpadded_output['SIC'])):
+        #        raise ValueError("unpadded_output contains NaN or Inf values.")
+        #else:  # Unpad taskB and taskC with shape [N, C, H, W]
+        unpadded_output[task] = pred[:, :, :H, :W]
+    
+    return {
+        'SIC': unpadded_output['SIC'],  # TaskA renamed to SIC
+        'SOD': unpadded_output['SOD'],  # TaskB renamed to SOD
+        'FLOE': unpadded_output['FLOE']  # TaskC renamed to FLOE
+    }
 
 def get_scheduler(train_options, optimizer):
     if train_options['scheduler']['type'] == 'CosineAnnealingLR':
@@ -489,6 +686,13 @@ def get_loss(loss, chart=None, **kwargs):
         from losses import MSELossWithIgnoreIndex
         kwargs.pop('type')
         loss = MSELossWithIgnoreIndex(**kwargs)
+    elif loss == 'GaussianNLLLossWithIgnoreIndex':
+        from losses import GaussianNLLLossWithIgnoreIndex
+        kwargs.pop('type')
+        loss = GaussianNLLLossWithIgnoreIndex(**kwargs)
+    elif loss == 'GaussianNLLLoss':
+        kwargs.pop('type')
+        loss = torch.nn.GaussianNLLLoss(**kwargs)
     else:
         raise ValueError(f'The given loss \'{loss}\' is unrecognized or Not implemented')
 
@@ -502,6 +706,8 @@ def get_model(train_options, device):
         net = UNet_feature_fusion(options=train_options, input_channels=input_channels).to(device) # updated with additional argument       
     elif train_options['model_selection'] == 'unet_regression':
         net = UNet_regression(options=train_options).to(device)
+    elif train_options['model_selection'] == 'unet_regression_var':
+        net = UNet_regression_var(options=train_options).to(device)
     elif train_options['model_selection'] == 'unet_regression_feature_fusion':
         input_channels = len(train_options['train_variables'])
         net = UNet_regression_feature_fusion(options=train_options, input_channels=input_channels).to(device)
@@ -509,6 +715,20 @@ def get_model(train_options, device):
         net = WNet(options=train_options).to(device)
     elif train_options['model_selection'] == 'wnet-separate-decoders':
         net = WNet_Separate_Decoders(options=train_options).to(device)
-    else:
+    elif train_options['model_selection'] == 'wnet-separate-viirs-decoders':
+        net = WNet_Separate_VIIRS_Decoders(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-viirs':
+        net = WNet_Separate_VIIRS(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-uncertainty':
+        net = WNet_Uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-decoders-uncertainty':
+        net = WNet_Separate_Decoders_Uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-viirs-uncertainty':
+        net = WNet_Separate_VIIRS_Uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'unet-uncertainty':
+        net = UNet_regression_uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'vit':
+        net = SegmentationViT(options=train_options).to(device)
+    else: 
         raise 'Unknown model selected'
     return net
