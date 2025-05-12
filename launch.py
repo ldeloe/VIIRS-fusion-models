@@ -61,21 +61,16 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     for epoch in tqdm(iterable=range(start_epoch, train_options['epochs'])):
         train_loss_sum = torch.tensor([0.])  # To sum the training batch losses during the epoch.
         cross_entropy_loss_sum = torch.tensor([0.])  # To sum the training cross entropy batch losses during the epoch.
-        # To sum the training edge consistency batch losses during the epoch.
-        #edge_consistency_loss_sum = torch.tensor([0.])
 
         val_loss_sum = torch.tensor([0.])  # To sum the validation batch losses during the epoch.
         # To sum the validation cross entropy batch losses during the epoch.
         val_cross_entropy_loss_sum = torch.tensor([0.])
-        # To sum the validation cedge consistency batch losses during the epoch.
-        #val_edge_consistency_loss_sum = torch.tensor([0.])
         net.train()  # Set network to evaluation mode.
 
         # Loops though batches in queue.
         for i, (batch_x, batch_y) in enumerate(tqdm(iterable=dataloader_train, total=train_options['epoch_len'],
                                                     colour='red')):
             train_loss_batch = torch.tensor([0.]).to(device)  # Reset from previous batch.
-            #edge_consistency_loss = torch.tensor([0.]).to(device)
             cross_entropy_loss = torch.tensor([0.]).to(device)
             # - Transfer to device.
             batch_x = batch_x.to(device, non_blocking=True)
@@ -86,19 +81,9 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 output = net(batch_x)
                 # - Calculate loss.
                 for chart, weight in zip(train_options['charts'], train_options['task_weights']):
-                    #if train_options['uncertainty'] != 0 and chart == 'SIC':
-                    #    var = torch.var(output[chart],keepdim=True)
-                    #else:
-                    #    cross_entropy_loss += weight * loss_ce_functions[chart](
-                    #        output[chart], batch_y[chart].to(device))
                     cross_entropy_loss += weight * loss_ce_functions[chart](
                         output[chart], batch_y[chart].to(device))
-            # Note: removed water edge loss; this conditional is a renment and could be removed in future
-            #if train_options['edge_consistency_loss'] != 0:
-            #    a = train_options['edge_consistency_loss']
-            #    train_loss_batch = cross_entropy_loss 
-            #else:
-            #    train_loss_batch = cross_entropy_loss
+ 
             train_loss_batch = cross_entropy_loss
             # - Reset gradients from previous pass.
             optimizer.zero_grad()
@@ -115,12 +100,10 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             # - Add batch loss.
             train_loss_sum += train_loss_batch.detach().item()
             cross_entropy_loss_sum += cross_entropy_loss.detach().item()
-            #edge_consistency_loss_sum += edge_consistency_loss.detach().item()
 
         # - Average loss for displaying
         train_loss_epoch = torch.true_divide(train_loss_sum, i + 1).detach().item()
         cross_entropy_epoch = torch.true_divide(cross_entropy_loss_sum, i + 1).detach().item()
-        #edge_consistency_epoch = torch.true_divide(edge_consistency_loss_sum, i + 1).detach().item()
 
         # -- Validation Loop -- #
         # - Stores the output and the reference pixels to calculate the scores after inference on all the scenes.
@@ -142,7 +125,6 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                                                                             colour='green')):
             torch.cuda.empty_cache()
             val_loss_batch = torch.tensor([0.]).to(device)
-            #val_edge_consistency_loss = torch.tensor([0.]).to(device)
             val_cross_entropy_loss = torch.tensor([0.]).to(device)
 
             # - Ensures that no gradients are calculated, which otherwise take up a lot of space on the GPU.
@@ -159,10 +141,6 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
 
                     val_cross_entropy_loss += weight * loss_ce_functions[chart](output[chart],
                                                                                 inf_y[chart].unsqueeze(0).long().to(device))
-
-                # Note: again, a remnent from removing the water loss
-                #if train_options['edge_consistency_loss'] != 0:
-                #    a = train_options['edge_consistency_loss']
 
             val_loss_batch = val_cross_entropy_loss
 
@@ -181,28 +159,22 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                                                 [~cfv_masks[chart]].to(device, non_blocking=True)))
 
             ### NEW ###
-            #output_preds = classify_SIC_tensor(output['SIC'][~cfv_masks['SIC']])
-            preds_SIC_class = classify_SIC_tensor(outputs_flat['SIC']) #torch.cat((preds_SIC_class, output_preds))#[~cfv_masks['SIC']])) 
-            #inf_ys_flat_target = classify_SIC_tensor(inf_ys_flat['SIC'][~cfv_masks['SIC']])
-            target_SIC_class = classify_SIC_tensor(inf_ys_flat['SIC']) #torch.cat((target_SIC_class, inf_ys_flat_target)) #[~cfv_masks['SIC']]))
+            preds_SIC_class = classify_SIC_tensor(outputs_flat['SIC']) 
+            target_SIC_class = classify_SIC_tensor(inf_ys_flat['SIC']) 
             ### NEW ###  
 
             # - Add batch loss.
             val_loss_sum += val_loss_batch.detach().item()
             val_cross_entropy_loss_sum += val_cross_entropy_loss.detach().item()
-            #val_edge_consistency_loss_sum += val_edge_consistency_loss.detach().item()
 
         # - Average loss for displaying
         val_loss_epoch = torch.true_divide(val_loss_sum, i + 1).detach().item()
         val_cross_entropy_epoch = torch.true_divide(val_cross_entropy_loss_sum, i + 1).detach().item()
-        #val_edge_consistency_epoch = torch.true_divide(val_edge_consistency_loss_sum, i + 1).detach().item()
 
         # - Compute the relevant scores.
         print('Computing Metrics on Val dataset')
         combined_score, scores = compute_metrics(true=inf_ys_flat, pred=outputs_flat, charts=train_options['charts'],
                                                  metrics=train_options['chart_metric'], num_classes=train_options['n_classes'])
-
-        #water_edge_accuarcy = water_edge_metric(outputs_tfv_mask, train_options)
 
         if train_options['compute_classwise_f1score']:
             from functions import compute_classwise_f1score
@@ -333,7 +305,6 @@ def main():
     # dump config
     shutil.copy(args.config, osp.join(cfg.work_dir, osp.basename(args.config)))
   
-    # ### CUDA / GPU Setup
     # Get GPU resources.
     if torch.cuda.is_available():
         print(colour_str('GPU available!', 'green'))
@@ -434,7 +405,6 @@ def main():
     print('-----------------------------------')
 
     # this is for valset 1 visualization along with gt
-    ####device = torch.device('cpu')
     test('val', net, checkpoint_path, device, cfg.deepcopy(), train_options['validate_list'], train_options['validate_list_viirs'], 'CrossValidation')
 
 

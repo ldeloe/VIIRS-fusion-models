@@ -51,6 +51,10 @@ train_options = {'train_variables': SCENE_VARIABLES,
                 'beta': 0.5,
                 'max_norm': 1,
 
+                'use_early_stopping': False,
+                'patience': 15,
+
+
                  # p leave out cross val run
                  'cross_val_run': True,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using

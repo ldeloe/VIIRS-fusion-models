@@ -57,6 +57,10 @@ train_options = {'train_variables': SCENE_VARIABLES,
                 'uncertainty': 1,
                 'beta': 0.5,
                 'max_norm': 1,
+
+                'use_early_stopping': False,
+                'patience': 15,
+                
                  # p leave out cross val run
                  'cross_val_run': True,
                  'p-out': 0, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
@@ -104,7 +108,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'epochs': 300,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
                  # Size of patches sampled. Used for both Width and Height.
-                 'task_weights': [1, 4, 4],
+                 'task_weights': [1, 3, 3],
                  'chart_loss': {  # Loss for the task
                      'SIC': {
                          'type': 'GaussianNLLLoss', 

@@ -14,7 +14,7 @@ from tqdm import tqdm
 from mmcv import mkdir_or_exist
 import wandb
 # --Proprietary modules -- #
-from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC, pad_and_infer, accuracy_metric, classify_SIC_tensor, classify_SIC_list, generate_pixels_per_class_bar_graph #water_edge_plot_overlay, water_edge_metric,
+from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC, pad_and_infer, accuracy_metric, classify_SIC_tensor, generate_pixels_per_class_bar_graph #water_edge_plot_overlay, water_edge_metric,
 from loaders import TestDataset, get_variable_options
 #from functions_VIIRS import slide_inference, batched_slide_inference
 from torchmetrics.functional.classification import multiclass_confusion_matrix
@@ -46,7 +46,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     artifact = wandb.Artifact(experiment_name+'_'+test_name, 'dataset')
     table = wandb.Table(columns=['ID', 'Image'])
 
-    #output_class = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
+
     # Stores the flat ouputs of only one scene.
     output_flat = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
     # Stores the flat outputs of all scene.
@@ -278,7 +278,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
 
         ### ADD NEW CLASSIFICATION FOR SIC METRIC ###
-        fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=2, figsize=(10, 10)) # (5, 14)
+        fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=2, figsize=(10, 10)) 
         axs_SIC_classes = axs2d_SIC_classes.flat
         ## SIC CLASSIFICATION ##
         n_classes = 4
@@ -336,7 +336,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
         
         # Get the scores per scene
-        print("ACTUAL METRIC (R2 RAND)")
         scene_combined_score, scene_scores = compute_metrics(true=inf_y_flat, pred=output_flat,
                                                              charts=train_options['charts'],
                                                              metrics=train_options['chart_metric_individual_scenes'],
@@ -344,13 +343,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         ### NEW ###
         scene_accuracy = accuracy_metric(output_preds, inf_y_flat_target)
         ### NEW ###        
-        ##TEST USING R2 METRIC ###
-        print("TEST METRIC (R2)")
         scene_combined_score_TEST, scene_scores_TEST = compute_metrics(true=inf_y_flat, pred=output_flat,
                                                              charts=train_options['charts'],
                                                              metrics=train_options['chart_metric'],
                                                              num_classes=train_options['n_classes'])        
-        #scene_water_edge_accuarcy = water_edge_metric(output_tfv_mask, train_options)
         
         # Create table with results and log it into wandb b. 
         # Add all the scores into a list and append it to results per scene. 
@@ -451,7 +447,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
             plt.ylabel('Actual Labels')
             plt.title(chart+" Confusion Matrix "+test_name)
             cbar = ax.collections[0].colorbar
-            # cbar.set_ticks([0, .2, .75, 1])
             cbar.set_ticklabels(['0%', '20%', '40%', '60%', '80%', '100%'])
             mkdir_or_exist(f"{osp.join(cfg.work_dir)}/{test_name}")
             plt.savefig(f"{osp.join(cfg.work_dir)}/{test_name}/{chart}_confusion_matrix.png",
@@ -509,7 +504,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         compression = dict(zlib=True, complevel=1)
         encoding = {var: compression for var in upload_package.data_vars}
         upload_package.to_netcdf(osp.join(cfg.work_dir, f'{experiment_name}_{test_name}_upload_package.nc'),
-                                 # f'{osp.splitext(osp.basename(cfg))[0]}
                                  mode='w', format='netcdf4', engine='h5netcdf', encoding=encoding)
         print('Testing completed.')
         print("File saved succesfully at", osp.join(cfg.work_dir, f'{experiment_name}_upload_package.nc'))

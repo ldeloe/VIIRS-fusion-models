@@ -29,7 +29,7 @@ from wnet_separate_viirs_uncertainty import WNet_Separate_VIIRS_Uncertainty
 from wnet_separate_decoders_uncertainty import WNet_Separate_Decoders_Uncertainty
 from r2_replacement import r2_score_random 
 
-from ViT import SegmentationViT
+#from ViT import SegmentationViT
 
 def generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_label, bar_width, title):
   labels = [GROUP_NAMES[chart][i] for i in range(len(pixels_per_class))]
@@ -44,12 +44,11 @@ def generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_lab
     
   plt.xlabel(x_label)
   plt.ylabel("Pixel Count Percentage [%]")
-  #plt.xticks(list(LABELS.values()), labels=list(LABELS.values()), rotation=45, ha='right')
   plt.xticks(list(GROUP_NAMES[chart].values()), rotation=45, ha='right')
   plt.tight_layout()
   plt.savefig(f"{title}-{chart}-BAR-CHART.png", dpi=150)
   plt.close('all')
-  #plt.show()  
+ 
 
 def chart_cbar(ax, n_classes, chart, cmap='vridis'):
 
@@ -98,22 +97,11 @@ def cbar_ice_classification(ax, n_classes, cmap='vridis'):
     cbar.set_ticklabels(list(LABELS.values()))
 
 def classify_from_SIC(SIC):
-    #SIC_classes = torch.zeros_like(SIC_tensor, dtype=torch.int32)
     SIC_classes = np.zeros_like(SIC, dtype=int)
     SIC_classes[(SIC >= 2) & (SIC <= 8)] = 1  # marginal ice
     SIC_classes[(SIC > 8) & (SIC <= 100)] = 2  # consolidated ice
     SIC_classes[SIC == 255] = 255
     return SIC_classes
-
-def classify_SIC_list(data):
-  #class_data = torch.zeros_like(data, dtype=torch.int32)
-  class_data = np.zeros_like(SIC, dtype=int)
-
-  class_data[(data >= 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
-  class_data[(data > 8) & (data <= 100)] = 2   # 8 < x <= 100 -> 2
-  class_data[data == 255] = 255
-
-  return class_data
 
 def classify_SIC_tensor(data):
   class_data = torch.zeros_like(data, dtype=torch.int32)
@@ -201,16 +189,10 @@ def r2_metric_rand(true, pred, num_classes):
         The calculated r2 score.
 
     """
-    #print("R2 metric rand")
-    #print("pred", len(pred))
-    #print("true", len(true))
     if (not len(pred)==0) and not (len(true)==0):
         r2 = r2_score_random(preds=pred, target=true,num_classes=num_classes)
     else:
         r2 = torch.tensor(float("nan"))
-
-    #print("R2 METRIC RAND")
-    #print(r2)
 
     return r2
 
@@ -237,13 +219,6 @@ def r2_metric(true, pred, num_classes=None):
 
     """
     r2 = r2_score(preds=pred, target=true)
-
-    #print("R2 METRIC pre change")
-    #print(r2)
-
-
-    #print("NANNNNNN change after debugging")
-    #return torch.tensor(float(0))
 
     return r2
 
@@ -335,7 +310,7 @@ def save_best_model(cfg, train_options: dict, net, optimizer, scheduler, epoch: 
 
     return os.path.join(cfg.work_dir, f'best_model_{config_file_name}.pth')
 
-### for inference??? ###
+
 def load_model(net, checkpoint_path, optimizer=None, scheduler=None):
     """
     Loads a PyTorch model from a checkpoint file and returns the model, optimizer, and scheduler.
@@ -430,7 +405,6 @@ def compute_classwise_f1score(true, pred, charts, num_classes):
         print('True: ', true[chart].shape, torch.unique(true[chart]))
         print('Pred: ', pred[chart].shape, torch.unique(pred[chart]))
 
-        #print(num_classes[chart])
         score[chart] = f1_score(target=true[chart], preds=pred[chart], average='none',
                                 task='multiclass', num_classes=num_classes[chart])
     return score
@@ -495,30 +469,22 @@ def create_train_validation_and_test_scene_list(train_options):
         Note: in future, could add a condition to the config to select one.
         '''
 
-        ### Select a random number of validation scenes with the same seed ###
-        #train_options['validate_list'] = np.random.choice(np.array(train_options['train_list']), size=train_options['p-out'], replace=False)
-        #train_options['validate_list_viirs'] = np.random.choice(np.array(train_options['train_viirs']), size=train_options['p-out'], replace=False)
-        ### Select a random number of validation scenes with the same seed ###
-
-        ### Randomly generated validation set ###
-        #random_indices = np.random.choice(len(np.array(train_options['train_list'])), size=train_options['p-out'], replace=False)
-        #train_options['validate_list'] = np.array(train_options['train_list'])[random_indices]
-            ### VIIRS ###
-        #train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[random_indices]
-            ### VIIRS ###
-        ### Randomly generated validation set ###
-
         ### Set validation set ###
+
+        # Validation set is fixed for comparison across models
+        # Conditional statement avoids file system error 
         if train_options['p-fold'] == 48:
             print('last file in fold 48 causes an error')
-            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+11] #+11] for 48
-                ### VIIRS ###
-            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+11] #+11] for 48
-        else:
-            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+12] #+11] for 48
-                ### VIIRS ###
-            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+12] #+11] for 48
+            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+11] 
             ### VIIRS ###
+            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+11] 
+            ### VIIRS ###
+        else:
+            train_options['validate_list'] = np.array(train_options['train_list'])[train_options['p-fold']:train_options['p-fold']+12]
+            ### VIIRS ###
+            train_options['validate_list_viirs'] = np.array(train_options['train_list_viirs'])[train_options['p-fold']:train_options['p-fold']+12] 
+            ### VIIRS ###
+
         ### Set validation set ###
         
     else:
@@ -553,7 +519,7 @@ def create_train_validation_and_test_scene_list(train_options):
         train_options['test_list_viirs'] = json.loads(file.read())
     ### VIIRS ###
 
-    print('Options initialised')
+    print('Options initialised') # Allows for verification that there aren't repeated files across the data lists
     print('train')
     print(train_options['train_list'])
     print(train_options['train_list_viirs'])
@@ -593,11 +559,6 @@ def pad_and_infer(model, image, train_size=256):
         for task in output_list[0].keys():
             task_outputs = [patch[task] for patch in output_list]
             
-            #if task == 'SIC':  # Special handling for taskA with shape [N, H, W, 1]
-            #    stitched_task = torch.cat([torch.cat(task_outputs[i*num_patches_w:(i+1)*num_patches_w], dim=2) for i in range(num_patches_h)], dim=1)
-            #    if torch.any(torch.isnan(stitched_task)) or torch.any(torch.isinf(stitched_task)):
-            #        raise ValueError("stitched_task contains NaN or Inf values.")
-            #else:  # For taskB and taskC with shape [N, C, H, W]
             stitched_task = torch.cat([torch.cat(task_outputs[i*num_patches_w:(i+1)*num_patches_w], dim=3) for i in range(num_patches_h)], dim=2)
             
             output[task] = stitched_task
@@ -605,11 +566,7 @@ def pad_and_infer(model, image, train_size=256):
     # Unpad the outputs
     unpadded_output = {}
     for task, pred in output.items():
-        #if task == 'SIC':  # Unpad taskA with shape [N, H, W, 1]
-        #    unpadded_output[task] = pred[:, :H, :W, :]
-        #    if torch.any(torch.isnan(unpadded_output['SIC'])) or torch.any(torch.isinf(unpadded_output['SIC'])):
-        #        raise ValueError("unpadded_output contains NaN or Inf values.")
-        #else:  # Unpad taskB and taskC with shape [N, C, H, W]
+
         unpadded_output[task] = pred[:, :, :H, :W]
     
     return {
@@ -686,11 +643,7 @@ def get_loss(loss, chart=None, **kwargs):
         from losses import MSELossWithIgnoreIndex
         kwargs.pop('type')
         loss = MSELossWithIgnoreIndex(**kwargs)
-    elif loss == 'GaussianNLLLossWithIgnoreIndex':
-        from losses import GaussianNLLLossWithIgnoreIndex
-        kwargs.pop('type')
-        loss = GaussianNLLLossWithIgnoreIndex(**kwargs)
-    elif loss == 'GaussianNLLLoss':
+    elif loss == 'GaussianNLLLoss': # also used for beta-nll loss because that loss function builds off gnll
         kwargs.pop('type')
         loss = torch.nn.GaussianNLLLoss(**kwargs)
     else:
