@@ -51,7 +51,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  # p leave out cross val run
                  'cross_val_run': True,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
-                 'p-fold': 36,
+                 'p-fold': 60,
                  'compute_classwise_f1score': True,
                  'plot_confusion_matrix': True,
                  'save_nc_file': True,
@@ -74,8 +74,8 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  },
 
                  'batch_size': 16, #16,
-                 'num_workers': 4, #4,  # Number of parallel processes to fetch data.
-                 'num_workers_val': 4, #4,  # Number of parallel processes during validation.
+                 'num_workers': 4,  # Number of parallel processes to fetch data.
+                 'num_workers_val': 4,  # Number of parallel processes during validation.
                  'patch_size': 256,
                  'down_sample_scale': 10,
 

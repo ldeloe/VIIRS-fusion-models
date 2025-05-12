@@ -1,11 +1,12 @@
 #import wandb
 #import torch
+import math
 
 #from functions import save_best_model
 
 class EarlyStopping:
 #    def __init__(self, patience=10, min_delta=0):
-    def __init__(self, patience=10, grace_period=100, min_delta=0):
+    def __init__(self, patience=10, grace_period=20, min_delta=0):
         """
         Args:
             patience (int): How many epochs to wait for improvement before stopping.
@@ -28,10 +29,14 @@ class EarlyStopping:
             self.best_loss = val_loss
             self.counter = 0
             print(f"Validation loss improved to {self.best_loss:.4f}")
+
         else:
             self.counter += 1
             print(f"No improvement in validation loss for {self.counter} epoch(s).")
         
+        if math.isnan(val_loss): 
+            self.counter = self.patience + 1
+            
         return self.counter >= self.patience
 
 #    def __call__(self, val_loss, model):

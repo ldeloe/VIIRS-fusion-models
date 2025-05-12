@@ -14,7 +14,7 @@ from tqdm import tqdm
 from mmcv import mkdir_or_exist
 import wandb
 # --Proprietary modules -- #
-from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC, accuracy_metric, classify_SIC_tensor, generate_pixels_per_class_bar_graph #water_edge_plot_overlay, water_edge_metric,
+from functions import chart_cbar, compute_metrics, class_decider, cbar_ice_classification, classify_from_SIC, pad_and_infer, accuracy_metric, classify_SIC_tensor, generate_pixels_per_class_bar_graph #water_edge_plot_overlay, water_edge_metric,
 from loaders import TestDataset, get_variable_options
 #from functions_VIIRS import slide_inference, batched_slide_inference
 from torchmetrics.functional.classification import multiclass_confusion_matrix
@@ -47,25 +47,25 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     table = wandb.Table(columns=['ID', 'Image'])
 
     # - Stores the output and the reference pixels to calculate the scores after inference on all the scenes.
-    #output_class = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    output_class = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Stores the flat ouputs of only one scene.
-    output_flat = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    output_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Stores the flat outputs of all scene.
-    outputs_flat = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    outputs_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Stores the flat ground truth of only one scene. 
-    inf_y_flat = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    inf_y_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Stores the flat ground truth of all scenes
-    inf_ys_flat = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    inf_ys_flat = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Outputs mask by train fill values for only one scene
-    output_tfv_mask = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    output_tfv_mask = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
     # Outputs mask by train fill values fo all scenes
-    outputs_tfv_mask = {chart: torch.Tensor().to("cpu") for chart in train_options['charts']}
+    outputs_tfv_mask = {chart: torch.Tensor().to(device) for chart in train_options['charts']}
 
     ### NEW ###
-    preds_SIC_class = torch.Tensor().to("cpu")
-    target_SIC_class = torch.Tensor().to("cpu")
-    output_preds = torch.Tensor().to("cpu")
-    inf_y_flat_target = torch.Tensor().to("cpu")
+    preds_SIC_class = torch.Tensor().to(device)
+    target_SIC_class = torch.Tensor().to(device)
+    output_preds = torch.Tensor().to(device)
+    inf_y_flat_target = torch.Tensor().to(device)
     ### NEW ###
 
     # ### Prepare the scene list, dataset and dataloaders
@@ -116,16 +116,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         with torch.no_grad(), torch.cuda.amp.autocast():
             if train_options['model_selection'] == 'swin':
                 output = slide_inference(inf_x, net, train_options, 'test')
+            elif train_options['model_selection'] == 'vit':
+                output = pad_and_infer(model=net, image=inf_x, train_size=train_options['patch_size'])                
             else:
                 output = net(inf_x)
-                if train_options['uncertainty'] != 0:
-                    sic_output_var = output['SIC']['variance'].unsqueeze(-1).to(device)  # Variance of SIC
-                    output['SIC'] = output['SIC']['mean'].unsqueeze(-1).to(device)  # Mean of SIC
-                    
-                    #sic_output_var = output['SIC'][..., 1].unsqueeze(-1).to(device) # may not be needed
-                    #output['SIC'] = output['SIC'][..., 0].unsqueeze(-1).to(device) 
-
-            inf_x = inf_x.to("cpu")
 
             # Up sample the masks
             tfv_mask = torch.nn.functional.interpolate(tfv_mask.type(torch.uint8).unsqueeze(0).unsqueeze(0), size=original_size, mode='nearest').squeeze().squeeze().to(torch.bool)
@@ -134,7 +128,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                 masks_int = torch.nn.functional.interpolate(masks_int.unsqueeze(
                     0).unsqueeze(0), size=original_size, mode='nearest').squeeze().squeeze()
                 cfv_masks[chart] = torch.gt(masks_int, 0)
-                cfv_masks[chart] = cfv_masks[chart].to("cpu")
 
             # Upsample data
             if train_options['down_sample_scale'] != 1:
@@ -148,51 +141,26 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                     else:
                         output[chart] = torch.nn.functional.interpolate(
                             output[chart], size=original_size, mode='nearest')
-                    output[chart] = output[chart].to("cpu")
-                    
-                    if chart == 'SIC' and sic_output_var.size(3) == 1:
-                        print('PERMUTE SIC OUTPUT VARIANCE')
-                        sic_output_var = sic_output_var.permute(0, 3, 1, 2)
-                        sic_output_var = torch.nn.functional.interpolate(
-                            sic_output_var, size=original_size, mode='nearest')
-                        sic_output_var = sic_output_var.permute(0, 2, 3, 1)
-                    elif chart == 'SIC':
-                        print('DO NOT PERMUTE SIC OUTPUT VARIANCE')
-                        sic_output_var = torch.nn.functional.interpolate(
-                            sic_output_var, size=original_size, mode='nearest')
-                    
+
                     # upscale the output
                     # if not test:
                     inf_y[chart] = torch.nn.functional.interpolate(inf_y[chart].unsqueeze(dim=0).unsqueeze(dim=0),
                                                                    size=original_size, mode='nearest').squeeze()
-                    inf_y[chart] = inf_y[chart].to("cpu")  
 
-                sic_output_var = sic_output_var.squeeze(0).squeeze(-1).cpu().numpy().astype(float)
-                                                             
-
-        output_class = {}
         for chart in train_options['charts']:
             ### why is class decider used here?
-            output_class[chart] = class_decider(output[chart].to(torch.float32), train_options, chart).detach()
+            output_class[chart] = class_decider(output[chart], train_options, chart).detach()
             if train_options['save_nc_file']:
                 upload_package[f"{scene_name}_{chart}"] = xr.DataArray(name=f"{scene_name}_{chart}",
                                                                        data=output_class[chart].squeeze().cpu().numpy().astype('uint8'),
                                                                        dims=(f"{scene_name}_{chart}_dim0", f"{scene_name}_{chart}_dim1"))
-                if chart == 'SIC':
-                    upload_package[f"{scene_name}_VAR"] = xr.DataArray(name=f"{scene_name}_VAR", data=sic_output_var, dims=(f"{scene_name}_VAR_dim0", f"{scene_name}_VAR_dim1"))
             output_flat[chart] = output_class[chart][~cfv_masks[chart]] 
             outputs_flat[chart] = torch.cat((outputs_flat[chart], output_flat[chart]))
             output_tfv_mask[chart] = output_class[chart][~tfv_mask].to(device)
             outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], outputs_tfv_mask[chart]))
-            inf_y_flat[chart] = inf_y[chart][~cfv_masks[chart]].to("cpu").float()
+            inf_y_flat[chart] = inf_y[chart][~cfv_masks[chart]].to(device, non_blocking=True).float()
             inf_ys_flat[chart] = torch.cat((inf_ys_flat[chart], inf_y_flat[chart]))
-        
-        ## do I need?? ##
-        #sic_output_var = sic_output_var.squeeze(0).squeeze(-1) # = torch.flatten(sic_output_var)
-        #sic_var_flat = sic_var_flat[~cfv_masks['SIC']]
-        #print("OUTPUT CLASS SHAPE: ", output_class['SIC'].size())
-        #print("SIC VAR SHAPE: ", sic_output_var.size())
-        #print("CFV MASKS SHAPE: ", cfv_masks['SIC'].size())
+
         ### NEW ###
         output_preds = classify_SIC_tensor(output_flat['SIC'])
         preds_SIC_class = torch.cat((preds_SIC_class, output_preds)) 
@@ -333,20 +301,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                     #format='png', dpi=128, bbox_inches="tight")
         plt.close('all')
 
-        ### SIC VARIANCE ###
-        #sic_output_var = sic_output_var.cpu().numpy().astype(float)
-        sic_output_var[cfv_masks['SIC']] = np.nan
-
-        fig_var, ax = plt.subplots()
-        ax.set_xticks([])
-        ax.set_yticks([])
-        plt.imshow(sic_output_var)
-        plt.title(scene_name)
-        cbar = plt.colorbar()
-        cbar.set_label(label= "Variance [%$^2$]", fontsize=12)
-        fig_var.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Variance.png",
-            format='png', dpi=150, bbox_inches="tight")
-        plt.close('all')
 
         ### ADD NEW CLASSIFICATION FOR SIC METRIC ###
         fig_SIC_classes, axs2d_SIC_classes = plt.subplots(nrows=2, ncols=2, figsize=(10, 10)) # (5, 14)
@@ -355,7 +309,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         n_classes = 4
         ax_SIC = axs_SIC_classes[0]
         converted_SIC = classify_from_SIC(output_class['SIC'])
-        #print('cfv_masks[SIC]: ', cfv_masks['SIC'])
+        print('cfv_masks[SIC]: ', cfv_masks['SIC'])
         #output_class['SIC'] = output_class['SIC'].astype(float)
         converted_SIC = converted_SIC.astype(float)
         converted_SIC[cfv_masks['SIC']] = np.nan
@@ -408,7 +362,7 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
 
         
         # Get the scores per scene
-        #print("ACTUAL METRIC (R2 RAND)")
+        print("ACTUAL METRIC (R2 RAND)")
         scene_combined_score, scene_scores = compute_metrics(true=inf_y_flat, pred=output_flat,
                                                              charts=train_options['charts'],
                                                              metrics=train_options['chart_metric_individual_scenes'],
@@ -417,11 +371,11 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         scene_accuracy = accuracy_metric(output_preds, inf_y_flat_target)
         ### NEW ###        
         ##TEST USING R2 METRIC ###
-        #print("TEST METRIC (R2)")
-        #scene_combined_score_TEST, scene_scores_TEST = compute_metrics(true=inf_y_flat, pred=output_flat,
-        #                                                     charts=train_options['charts'],
-        #                                                     metrics=train_options['chart_metric'],
-        #                                                     num_classes=train_options['n_classes'])        
+        print("TEST METRIC (R2)")
+        scene_combined_score_TEST, scene_scores_TEST = compute_metrics(true=inf_y_flat, pred=output_flat,
+                                                             charts=train_options['charts'],
+                                                             metrics=train_options['chart_metric'],
+                                                             num_classes=train_options['n_classes'])        
         #scene_water_edge_accuarcy = water_edge_metric(output_tfv_mask, train_options)
         
         # Create table with results and log it into wandb b. 
@@ -491,7 +445,6 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
     #print("FULL DATASET SCENE SCORES")
     #print(scene_results2)    
     # Release 
-    del inf_x, output
     torch.cuda.empty_cache()
 
     print('done calculating overall results. ')

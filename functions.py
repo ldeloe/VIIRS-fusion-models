@@ -13,16 +13,23 @@ import torch
 import torch.utils.data as data
 from torchmetrics.functional import r2_score, f1_score, accuracy
 from tqdm import tqdm  # Progress bar
+import torch.nn.functional as F
+import math
 # -- Proprietary modules -- #
 
 from utils import ICE_STRINGS, GROUP_NAMES
-from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_feature_fusion
+from unet import UNet, UNet_feature_fusion, UNet_regression, UNet_regression_feature_fusion, UNet_regression_var
 from wnet import WNet
 from wnet_separate_decoders import WNet_Separate_Decoders
+from wnet_separate_viirs_decoders import WNet_Separate_VIIRS_Decoders
 from wnet_separate_viirs import WNet_Separate_VIIRS
 from wnet_uncertainty import WNet_Uncertainty
-
+from unet_uncertainty import UNet_regression_uncertainty
+from wnet_separate_viirs_uncertainty import WNet_Separate_VIIRS_Uncertainty
+from wnet_separate_decoders_uncertainty import WNet_Separate_Decoders_Uncertainty
 from r2_replacement import r2_score_random 
+
+from ViT import SegmentationViT
 
 def generate_pixels_per_class_bar_graph(chart, pixels_per_class, n_pixels, x_label, bar_width, title):
   labels = [GROUP_NAMES[chart][i] for i in range(len(pixels_per_class))]
@@ -97,6 +104,16 @@ def classify_from_SIC(SIC):
     SIC_classes[(SIC > 8) & (SIC <= 100)] = 2  # consolidated ice
     SIC_classes[SIC == 255] = 255
     return SIC_classes
+
+def classify_SIC_list(data):
+  #class_data = torch.zeros_like(data, dtype=torch.int32)
+  class_data = np.zeros_like(SIC, dtype=int)
+
+  class_data[(data >= 2) & (data <= 8)] = 1     # 2 < x <= 8 -> 1
+  class_data[(data > 8) & (data <= 100)] = 2   # 8 < x <= 100 -> 2
+  class_data[data == 255] = 255
+
+  return class_data
 
 def classify_SIC_tensor(data):
   class_data = torch.zeros_like(data, dtype=torch.int32)
@@ -410,7 +427,9 @@ def compute_classwise_f1score(true, pred, charts, num_classes):
     """
     score = {}
     for chart in charts:
-        #print(chart)
+        print('True: ', true[chart].shape, torch.unique(true[chart]))
+        print('Pred: ', pred[chart].shape, torch.unique(pred[chart]))
+
         #print(num_classes[chart])
         score[chart] = f1_score(target=true[chart], preds=pred[chart], average='none',
                                 task='multiclass', num_classes=num_classes[chart])
@@ -545,6 +564,60 @@ def create_train_validation_and_test_scene_list(train_options):
     print(train_options['validate_list'])
     print(train_options['validate_list_viirs'])
 
+def pad_and_infer(model, image, train_size=256):
+    N, C, H, W = image.shape
+    
+    # Calculate padding to make dimensions divisible by train_size (256)
+    pad_h = (train_size - H % train_size) % train_size
+    pad_w = (train_size - W % train_size) % train_size
+    
+    # Pad the image
+    padded_image = F.pad(image, (0, pad_w, 0, pad_h), mode='reflect')
+    
+    # Calculate the number of 256x256 patches
+    num_patches_h = math.ceil((H + pad_h) / train_size)
+    num_patches_w = math.ceil((W + pad_w) / train_size)
+    
+    # Perform inference
+    with torch.no_grad():
+        # Process the image in 256x256 patches
+        output_list = []
+        for i in range(num_patches_h):
+            for j in range(num_patches_w):
+                patch = padded_image[:, :, i*train_size:(i+1)*train_size, j*train_size:(j+1)*train_size]
+                patch_output = model(patch)
+                output_list.append(patch_output)
+        
+        # Stitch the patches back together
+        output = {}
+        for task in output_list[0].keys():
+            task_outputs = [patch[task] for patch in output_list]
+            
+            #if task == 'SIC':  # Special handling for taskA with shape [N, H, W, 1]
+            #    stitched_task = torch.cat([torch.cat(task_outputs[i*num_patches_w:(i+1)*num_patches_w], dim=2) for i in range(num_patches_h)], dim=1)
+            #    if torch.any(torch.isnan(stitched_task)) or torch.any(torch.isinf(stitched_task)):
+            #        raise ValueError("stitched_task contains NaN or Inf values.")
+            #else:  # For taskB and taskC with shape [N, C, H, W]
+            stitched_task = torch.cat([torch.cat(task_outputs[i*num_patches_w:(i+1)*num_patches_w], dim=3) for i in range(num_patches_h)], dim=2)
+            
+            output[task] = stitched_task
+    
+    # Unpad the outputs
+    unpadded_output = {}
+    for task, pred in output.items():
+        #if task == 'SIC':  # Unpad taskA with shape [N, H, W, 1]
+        #    unpadded_output[task] = pred[:, :H, :W, :]
+        #    if torch.any(torch.isnan(unpadded_output['SIC'])) or torch.any(torch.isinf(unpadded_output['SIC'])):
+        #        raise ValueError("unpadded_output contains NaN or Inf values.")
+        #else:  # Unpad taskB and taskC with shape [N, C, H, W]
+        unpadded_output[task] = pred[:, :, :H, :W]
+    
+    return {
+        'SIC': unpadded_output['SIC'],  # TaskA renamed to SIC
+        'SOD': unpadded_output['SOD'],  # TaskB renamed to SOD
+        'FLOE': unpadded_output['FLOE']  # TaskC renamed to FLOE
+    }
+
 def get_scheduler(train_options, optimizer):
     if train_options['scheduler']['type'] == 'CosineAnnealingLR':
         T_max = train_options['epochs']*train_options['epoch_len']
@@ -633,6 +706,8 @@ def get_model(train_options, device):
         net = UNet_feature_fusion(options=train_options, input_channels=input_channels).to(device) # updated with additional argument       
     elif train_options['model_selection'] == 'unet_regression':
         net = UNet_regression(options=train_options).to(device)
+    elif train_options['model_selection'] == 'unet_regression_var':
+        net = UNet_regression_var(options=train_options).to(device)
     elif train_options['model_selection'] == 'unet_regression_feature_fusion':
         input_channels = len(train_options['train_variables'])
         net = UNet_regression_feature_fusion(options=train_options, input_channels=input_channels).to(device)
@@ -640,10 +715,20 @@ def get_model(train_options, device):
         net = WNet(options=train_options).to(device)
     elif train_options['model_selection'] == 'wnet-separate-decoders':
         net = WNet_Separate_Decoders(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-viirs-decoders':
+        net = WNet_Separate_VIIRS_Decoders(options=train_options).to(device)
     elif train_options['model_selection'] == 'wnet-separate-viirs':
         net = WNet_Separate_VIIRS(options=train_options).to(device)
     elif train_options['model_selection'] == 'wnet-uncertainty':
         net = WNet_Uncertainty(options=train_options).to(device)
-    else:
+    elif train_options['model_selection'] == 'wnet-separate-decoders-uncertainty':
+        net = WNet_Separate_Decoders_Uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'wnet-separate-viirs-uncertainty':
+        net = WNet_Separate_VIIRS_Uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'unet-uncertainty':
+        net = UNet_regression_uncertainty(options=train_options).to(device)
+    elif train_options['model_selection'] == 'vit':
+        net = SegmentationViT(options=train_options).to(device)
+    else: 
         raise 'Unknown model selected'
     return net

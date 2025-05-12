@@ -47,11 +47,14 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'test_viirs': 'datalists/validation_dataset_viirs.json', #'datalists/test_dataset_viirs.json', #test_viirs.json',#
                  'validate_viirs': 'datalists/test_dataset_viirs.json', #'datalists/validation_dataset_viirs.json', #validate_viirs.json',#
 
+                'uncertainty': 1,
+                'beta': 0.5,
+                'max_norm': 1,
 
                  # p leave out cross val run
                  'cross_val_run': True,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
-                 'p-fold': 36,
+                 'p-fold': 0,
                  'compute_classwise_f1score': True,
                  'plot_confusion_matrix': True,
                  'save_nc_file': True,
@@ -74,8 +77,8 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  },
 
                  'batch_size': 16, #16,
-                 'num_workers': 4, #4,  # Number of parallel processes to fetch data.
-                 'num_workers_val': 4, #4,  # Number of parallel processes during validation.
+                 'num_workers': 4,  # Number of parallel processes to fetch data.
+                 'num_workers_val': 4,  # Number of parallel processes during validation.
                  'patch_size': 256,
                  'down_sample_scale': 10,
 
@@ -90,7 +93,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                      'Cutmix_prob': 0.5,
                  },
                  # -- Model selection -- #
-                 'model_selection': 'unet_regression',#'unet_feature_fusion', #'unet_regression',
+                 'model_selection': 'unet_regression_var',#'unet_feature_fusion', #'unet_regression',
                  'unet_conv_filters': [32, 32, 64, 64],
                  'epochs': 300,  # Number of epochs before training stop.
                  'epoch_len': 500,  # Number of batches for each epoch.
@@ -98,8 +101,10 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  'task_weights': [1, 3, 3],
                  'chart_loss': {  # Loss for the task
                      'SIC': {
-                         'type': 'MSELossWithIgnoreIndex',
-                         'ignore_index': 255,
+                         'type': 'GaussianNLLLoss', #'MSELossWithIgnoreIndex',
+                         'reduction': 'none',
+                         'eps': 1e-3,
+                         #'ignore_index': 255, # comment out if GaussianNLLLoss
                      },
                      'SOD': {
                          'type': 'CrossEntropyLoss',

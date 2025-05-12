@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --nodes 1
-#SBATCH --gpus-per-node=1 # request a GPU
+#SBATCH --gres=gpu:a100_1g.5gb:1
 #SBATCH --tasks-per-node=1
-#SBATCH --cpus-per-task=12 # change this parameter to 2,4,6,... and increase "--num_workers" accordingly to see the effect on performance
-#SBATCH --mem=128G
-#SBATCH --time=2:00:00
+#SBATCH --cpus-per-task=4 # change this parameter to 2,4,6,... and increase "--num_workers" accordingly to see the effect on performance
+#SBATCH --mem=50G
+#SBATCH --time=5:00:00
 #SBATCH --output=/home/lcbdeloe/projects/def-ka3scott/lcbdeloe/VIIRS-fusion-models/compute_canada_output/%j.out
 #SBATCH --account=def-ka3scott
 #SBATCH --mail-user=lcbdeloe@uwaterloo.ca
@@ -30,8 +30,4 @@ echo "starting training..."
 
 export WANDB_MODE=offline
 
-python launch.py $1 --wandb-project=$2
-
-
-
-
+python launch_uncertainty.py $1 --wandb-project=$2

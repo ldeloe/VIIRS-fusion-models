@@ -56,7 +56,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     loss_ce_functions = {chart: get_loss(train_options['chart_loss'][chart]['type'], chart=chart, **train_options['chart_loss'][chart])
                          for chart in train_options['charts']}
 
-    #early_stopping = EarlyStopping(patience=15) ### EARLY STOPPING
+    early_stopping = EarlyStopping(patience=15) ### EARLY STOPPING
     print('Training...')
     # -- Training Loop -- #
     for epoch in tqdm(iterable=range(start_epoch, train_options['epochs'])):
@@ -95,9 +95,6 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                         loss = loss_ce_functions[chart](sic_mean.to(device), batch_y[chart].to(device), sic_variance.to(device)) 
                         mask = (batch_y[chart] != 255).type_as(sic_mean)
                         masked_loss = loss * mask
-
-                        if train_options['beta'] != 0:
-                            masked_loss = masked_loss*(sic_variance**train_options['beta'])
                         # Reduce the masked loss (e.g., mean over valid elements)
                         final_loss = masked_loss.sum() / mask.sum() #masked_loss.nansum() / mask.nansum() # was just .sum()
                         #if np.isnan(final_loss):
@@ -183,9 +180,6 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                         loss = loss_ce_functions[chart](sic_mean.to(device), inf_y[chart].unsqueeze(0).long().to(device), sic_variance.to(device))
                         mask = (inf_y[chart].unsqueeze(0).long() != 255).type_as(sic_mean)
                         masked_loss = loss * mask
-
-                        if train_options['beta'] != 0:
-                            masked_loss = masked_loss*(sic_variance**train_options['beta'])
                         # Reduce the masked loss (e.g., mean over valid elements)
                         final_loss = masked_loss.sum() / mask.sum()
                         val_cross_entropy_loss += weight * final_loss
@@ -312,8 +306,8 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             wandb.save(model_path)
         
         #if early_stopping(val_loss_epoch, net):
-        #if early_stopping(val_loss_epoch):
-        #    break
+        if early_stopping(val_loss_epoch):
+            break
         ### IMPLEMENTATION OF EARLY STOPPING ###
 
     del inf_ys_flat, outputs_flat  # Free memory.

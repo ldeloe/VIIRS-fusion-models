@@ -13,7 +13,7 @@ from tqdm import tqdm  # Progress bar
 import wandb
 from mmcv import Config, mkdir_or_exist
 
-from functions import compute_metrics, save_best_model, load_model, class_decider, \
+from functions import compute_metrics, save_best_model, load_model, class_decider, pad_and_infer, \
 create_train_validation_and_test_scene_list, get_scheduler, get_optimizer, get_loss, get_model, accuracy_metric, classify_SIC_tensor
 
 from early_stopping import EarlyStopping
@@ -55,7 +55,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
     loss_ce_functions = {chart: get_loss(train_options['chart_loss'][chart]['type'], chart=chart, **train_options['chart_loss'][chart])
                          for chart in train_options['charts']}
 
-    early_stopping = EarlyStopping(patience=15) ## early stopping
+    #early_stopping = EarlyStopping(patience=15) ## early stopping
     print('Training...')
     # -- Training Loop -- #
     for epoch in tqdm(iterable=range(start_epoch, train_options['epochs'])):
@@ -150,6 +150,8 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                 inf_x = inf_x.to(device, non_blocking=True)
                 if train_options['model_selection'] == 'swin':
                     output = slide_inference(inf_x, net, train_options, 'val')
+                elif train_options['model_selection'] == 'vit':
+                    output = pad_and_infer(model=net, image=inf_x, train_size=train_options['patch_size'])
                 else:
                     output = net(inf_x)
 
@@ -167,7 +169,11 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             # - Final output layer, and storing of non masked pixels.
             for chart in train_options['charts']:
                 #print("CHART: ", chart)
+                if chart == 'SIC':
+                    print("SIC before class decider: ", torch.unique(output['SIC']))
                 output[chart] = class_decider(output[chart], train_options, chart)
+                if chart == 'SIC':
+                    print("SIC after class decider: ", torch.unique(output['SIC']))
                 outputs_flat[chart] = torch.cat((outputs_flat[chart], output[chart][~cfv_masks[chart]]))
 
                 outputs_tfv_mask[chart] = torch.cat((outputs_tfv_mask[chart], output[chart][~tfv_mask]))
@@ -254,8 +260,8 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
 
             wandb.save(model_path)
 
-        if early_stopping(val_loss_epoch): ## early stopping
-            break
+        #if early_stopping(val_loss_epoch): ## early stopping
+        #    break
 
     del inf_ys_flat, outputs_flat  # Free memory.
     return model_path
@@ -428,6 +434,7 @@ def main():
     print('-----------------------------------')
 
     # this is for valset 1 visualization along with gt
+    ####device = torch.device('cpu')
     test('val', net, checkpoint_path, device, cfg.deepcopy(), train_options['validate_list'], train_options['validate_list_viirs'], 'CrossValidation')
 
 

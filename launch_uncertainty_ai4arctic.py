@@ -92,17 +92,16 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                         # COULD REMOVE UNSQUEEZE IF REMOVE SQUEEZE FROM FUNCTION
                         sic_mean = output[chart]['mean']  # Mean of SIC
                         sic_variance = output[chart]['variance']  # Variance of SIC
-                        loss = loss_ce_functions[chart](sic_mean.to(device), batch_y[chart].to(device), sic_variance.to(device)) 
-                        mask = (batch_y[chart] != 255).type_as(sic_mean)
-                        masked_loss = loss * mask
-
-                        if train_options['beta'] != 0:
-                            masked_loss = masked_loss*(sic_variance**train_options['beta'])
+                        cross_entropy_loss += weight * loss_ce_functions[chart](
+                            sic_mean.to(device), batch_y[chart].to(device))
+                        #loss = loss_ce_functions[chart](sic_mean.to(device), batch_y[chart].to(device), sic_variance.to(device)) 
+                        #mask = (batch_y[chart] != 255).type_as(sic_mean)
+                        #masked_loss = loss * mask
                         # Reduce the masked loss (e.g., mean over valid elements)
-                        final_loss = masked_loss.sum() / mask.sum() #masked_loss.nansum() / mask.nansum() # was just .sum()
+                        #final_loss = masked_loss.sum() / mask.sum() #masked_loss.nansum() / mask.nansum() # was just .sum()
                         #if np.isnan(final_loss):
                         #    final_loss = 0.0
-                        cross_entropy_loss += weight * final_loss
+                        #cross_entropy_loss += weight * final_loss
                         #cross_entropy_loss += weight * loss_ce_functions[chart](
                         #    sic_mean.unsqueeze(-1).to(device), batch_y[chart].to(device), sic_variance.unsqueeze(-1).to(device)) 
                         #cross_entropy_loss += weight * loss_ce_functions[chart](
@@ -127,7 +126,7 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
             train_loss_batch.backward()
 
             # - Prevent exploding gradient with GaussianNLLLoss
-            torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=train_options['max_norm']) #max_norm=1.0) 
+            #torch.nn.utils.clip_grad_norm_(net.parameters(), max_norm=train_options['max_norm']) #max_norm=1.0) 
 
             # - Optimizer step
             optimizer.step()
@@ -180,15 +179,14 @@ def train(cfg, train_options, net, device, dataloader_train, dataloader_val, opt
                     if train_options['uncertainty'] != 0 and chart == 'SIC':
                         sic_mean = output[chart]['mean']  # Mean of SIC
                         sic_variance = output[chart]['variance']  # Variance of SIC
-                        loss = loss_ce_functions[chart](sic_mean.to(device), inf_y[chart].unsqueeze(0).long().to(device), sic_variance.to(device))
-                        mask = (inf_y[chart].unsqueeze(0).long() != 255).type_as(sic_mean)
-                        masked_loss = loss * mask
-
-                        if train_options['beta'] != 0:
-                            masked_loss = masked_loss*(sic_variance**train_options['beta'])
+                        cross_entropy_loss += weight * loss_ce_functions[chart](
+                            sic_mean.to(device), inf_y[chart].unsqueeze(0).long().to(device))
+                        #loss = loss_ce_functions[chart](sic_mean.to(device), inf_y[chart].unsqueeze(0).long().to(device), sic_variance.to(device))
+                        #mask = (inf_y[chart].unsqueeze(0).long() != 255).type_as(sic_mean)
+                        #masked_loss = loss * mask
                         # Reduce the masked loss (e.g., mean over valid elements)
-                        final_loss = masked_loss.sum() / mask.sum()
-                        val_cross_entropy_loss += weight * final_loss
+                        #final_loss = masked_loss.sum() / mask.sum()
+                        #val_cross_entropy_loss += weight * final_loss
                         #val_cross_entropy_loss += weight * loss_ce_functions[chart](
                         #    output[chart][..., 0].unsqueeze(-1).to(device), inf_y[chart].unsqueeze(0).long().to(device), output[chart][..., 1].unsqueeze(-1).to(device))                        
                     else:

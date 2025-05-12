@@ -18,80 +18,6 @@ __date__ = '2022-09-20'
 # -- Third-party modules -- #
 import torch
 
-### VIIRS ###
-class UNet_feature_fusion(torch.nn.Module):
-    
-    """U-NET model definition."""
-
-    def __init__(self, options, input_channels):
-        super(UNet_feature_fusion, self).__init__()
-        
-        print("FEATURE FUSION")
-        # Initialize U-NET blocks using UNet_vars
-        self.input_block = DoubleConv(options, input_n=input_channels - 1,
-                                      output_n=options['unet_conv_filters'][0])
-
-        self.contract_blocks = torch.nn.ModuleList()
-        for contract_n in range(1, len(options['unet_conv_filters'])):
-            self.contract_blocks.append(
-                ContractingBlock(options=options,
-                                 input_n=options['unet_conv_filters'][contract_n - 1],
-                                 output_n=options['unet_conv_filters'][contract_n]))
-
-        self.bridge = ContractingBlock(
-            options, input_n=options['unet_conv_filters'][-1], output_n=options['unet_conv_filters'][-1])
-
-        self.expand_blocks = torch.nn.ModuleList()
-        self.expand_blocks.append(
-            ExpandingBlock(options=options, input_n=options['unet_conv_filters'][-1],
-                           output_n=options['unet_conv_filters'][-1]))
-
-        for expand_n in range(len(options['unet_conv_filters']), 1, -1):
-            self.expand_blocks.append(ExpandingBlock(options=options,
-                                                     input_n=options['unet_conv_filters'][expand_n - 1],
-                                                     output_n=options['unet_conv_filters'][expand_n - 2]))
-
-        # Initialize IST_block using IST_var
-        self.IST_block = IST_block(options, input_n=1, output_n=options['unet_conv_filters'][0])
-
-        # Initialize feature map layers
-        ### VIIRS ### 
-        # multiplied by factor of 2 so the number of filters matches the concatenated channels
-        self.sic_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0]*2, output_n=options['n_classes']['SIC'])
-        self.sod_feature_map = FeatureMap(input_n=options['unet_conv_filters'][0]*2, output_n=options['n_classes']['SOD'])
-        self.floe_feature_map = FeatureMap(
-            input_n=options['unet_conv_filters'][0]*2, output_n=options['n_classes']['FLOE'])
-
-    def forward(self, x):
-        """Forward model pass."""
-        # Split input tensor into UNet_vars and IST_var
-        UNet_vars = x[:, :-1] #row, column
-        IST_var = x[:, -1:]
-
-        # Pass UNet_vars through U-NET blocks
-        x_contract = [self.input_block(UNet_vars)]
-        for contract_block in self.contract_blocks:
-            output = contract_block(x_contract[-1])
-            x_contract.append(output)
-
-        x_expand = self.bridge(x_contract[-1])
-        up_idx = len(x_contract)
-        for expand_block in self.expand_blocks:
-            x_expand = expand_block(x_expand, x_contract[up_idx - 1])
-            up_idx -= 1
-
-        # Pass IST_var through IST_block
-        x_ist = self.IST_block(IST_var)
-
-        # Concatenate outputs of U-NET and IST_block
-        combined_output = torch.cat([x_expand, x_ist], dim=1)
-
-        return {'SIC': self.sic_feature_map(combined_output),
-                'SOD': self.sod_feature_map(combined_output),
-                'FLOE': self.floe_feature_map(combined_output)}
-
-### VIIRS ###
-
 class UNet(torch.nn.Module):
 
     """PyTorch U-Net Class. Uses unet_parts."""
@@ -145,37 +71,10 @@ class UNet(torch.nn.Module):
                 'SOD': self.sod_feature_map(x_expand),
                 'FLOE': self.floe_feature_map(x_expand)}
 
-class UNet_regression(UNet):
+class UNet_regression_uncertainty(UNet):
 
     def __init__(self, options):
         super().__init__(options)
-
-        print("UNet_regression")
-
-        self.regression_layer = torch.nn.Linear(options['unet_conv_filters'][0], 1)
-
-    def forward(self, x):
-        """Forward model pass."""
-        x_contract = [self.input_block(x)]
-        for contract_block in self.contract_blocks:
-            x_contract.append(contract_block(x_contract[-1]))
-
-        x_expand = self.bridge(x_contract[-1])
-        up_idx = len(x_contract)
-        for expand_block in self.expand_blocks:
-            x_expand = expand_block(x_expand, x_contract[up_idx - 1])
-            up_idx -= 1
-
-        return {'SIC': self.regression_layer(x_expand.permute(0, 2, 3, 1)),
-                'SOD': self.sod_feature_map(x_expand),
-                'FLOE': self.floe_feature_map(x_expand)}
-
-class UNet_regression_var(UNet):
-
-    def __init__(self, options):
-        super().__init__(options)
-
-        print("UNet_regression_var")
 
         self.regression_layer = torch.nn.Linear(options['unet_conv_filters'][0], 2)
 

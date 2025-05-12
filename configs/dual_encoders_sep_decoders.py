@@ -58,7 +58,7 @@ train_options = {'train_variables': SCENE_VARIABLES,
                  # p leave out cross val run
                  'cross_val_run': True,
                  'p-out': 12, # number of scenes taken from the TRAIN SET. Must change the datalist to move validation scenes to train if using
-                 'p-fold': 0,
+                 'p-fold': 60,
                  'compute_classwise_f1score': True,
                  'plot_confusion_matrix': True,
                  'save_nc_file': True,
