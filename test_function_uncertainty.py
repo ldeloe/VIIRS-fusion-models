@@ -173,7 +173,10 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
                                                                        data=output_class[chart].squeeze().cpu().numpy().astype('uint8'),
                                                                        dims=(f"{scene_name}_{chart}_dim0", f"{scene_name}_{chart}_dim1"))
                 if chart == 'SIC':
+                    sic_output_var[cfv_masks['SIC']] = np.nan
                     upload_package[f"{scene_name}_VAR"] = xr.DataArray(name=f"{scene_name}_VAR", data=sic_output_var, dims=(f"{scene_name}_VAR_dim0", f"{scene_name}_VAR_dim1"))
+                    upload_package[f"{scene_name}_STD_DEV"] = xr.DataArray(name=f"{scene_name}_STD_DEV", data=np.sqrt(sic_output_var), dims=(f"{scene_name}_STD_DEV_dim0", f"{scene_name}_STD_DEV_dim1"))
+
             output_flat[chart] = output_class[chart][~cfv_masks[chart]] 
             outputs_flat[chart] = torch.cat((outputs_flat[chart], output_flat[chart]))
             output_tfv_mask[chart] = output_class[chart][~tfv_mask].to(device)
@@ -291,16 +294,19 @@ def test(mode: str, net: torch.nn.modules, checkpoint: str, device: str, cfg, te
         plt.close('all')
 
         ### SIC VARIANCE ###
-        sic_output_var[cfv_masks['SIC']] = np.nan
+        #sic_output_var[cfv_masks['SIC']] = np.nan
 
         fig_var, ax = plt.subplots()
         ax.set_xticks([])
         ax.set_yticks([])
-        plt.imshow(sic_output_var)
+        #plt.imshow(sic_output_var)
+        plt.imshow(np.sqrt(sic_output_var))
         plt.title(scene_name)
         cbar = plt.colorbar()
-        cbar.set_label(label= "Variance [%$^2$]", fontsize=12)
-        fig_var.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Variance.png",
+        #cbar.set_label(label= "Variance [%$^2$]", fontsize=12)
+        cbar.set_label(label= "Standard Deviation [%]", fontsize=12)
+        #fig_var.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Variance.png",
+        fig_var.savefig(f"{osp.join(cfg.work_dir,inference_name,scene_name)}-SIC-Std-Dev.png",
             format='png', dpi=150, bbox_inches="tight")
         plt.close('all')
 
