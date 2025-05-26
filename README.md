@@ -2,7 +2,7 @@
 
 ## Double U-Net (W-Net) Model
 
-![W-Net](https://github.com/user-attachments/assets/c7eeb49d-7368-4a62-ba52-bd6e968fb0cc)
+![image](https://github.com/user-attachments/assets/33a3b7cb-c0b3-408f-9e43-4f83a0280f15)
 
 ## Dependencies
 The following dependencies were used to create the current venv:
