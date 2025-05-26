@@ -56,11 +56,6 @@ class WNet_Separate_VIIRS(torch.nn.Module):
                                                      input_n=(options['unet_conv_filters'][expand_n] + options['unet_conv_filters'][expand_n-1]*2),
                                                      output_n=options['unet_conv_filters'][expand_n - 1]))   
                                                                   
-            #Note: revert to this code if something in the logic breaks when testing different filters
-            #self.expand_blocks.append(ExpandingBlock(options=options,
-            #                                         input_n=options['deconv_filters'][expand_n-1],
-            #                                         output_n=options['unet_conv_filters'][expand_n - 1]))
-
         # regression layer + MSE loss
         self.regression_layer = torch.nn.Linear(options['unet_conv_filters'][0], 1)
 
@@ -74,7 +69,7 @@ class WNet_Separate_VIIRS(torch.nn.Module):
 
         # split the inputs (x) according to the two encoding paths
         # Note: review the data loader to view the order of input channel types
-        x_viirs = x[:, -1:] #torch.cat((x[:, :4], x[:, -1:]), dim=1)
+        x_viirs = x[:, -1:] 
         x_ai4arctic = x[:,:-1]
 
         # encoding path for the SAR and VIIRS channels
@@ -90,8 +85,6 @@ class WNet_Separate_VIIRS(torch.nn.Module):
             x_contract_arc.append(output_arc)
 
         # concetenate the tensors at each level of the SV and AEA branches.
-        # Note: this is not really required because these lists are used separately for 
-        # expand padding. This could be removed in future
         x_contract = [torch.cat((v, arc), dim=1) for v, arc in zip(x_contract_v, x_contract_arc)]
 
         # bridge connection between the encoding and decoding paths

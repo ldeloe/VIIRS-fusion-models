@@ -7,12 +7,6 @@
 from torchvision.models.resnet import BasicBlock
 from torch import nn
 from torchvision import models
-__author__ = 'Andreas R. Stokholm'
-__contributor__ = 'Andrzej S. Kucik'
-__copyright__ = ['Technical University of Denmark', 'European Space Agency']
-__contact__ = ['stokholm@space.dtu.dk', 'andrzej.kucik@esa.int']
-__version__ = '0.3.0'
-__date__ = '2022-09-20'
 
 
 # -- Third-party modules -- #
