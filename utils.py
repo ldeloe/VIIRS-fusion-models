@@ -3,13 +3,6 @@
 
 """Utilization resources."""
 
-# -- File info -- #
-__author__ = 'Andreas R. Stokholm'
-__contributors__ = ''
-__copyright__ = ['Technical University of Denmark', 'European Space Agency']
-__contact__ = ['stokholm@space.dtu.dk']
-__version__ = '0.1.0'
-__date__ = '2022-09-20'
 
 
 # Charts in the dataset
